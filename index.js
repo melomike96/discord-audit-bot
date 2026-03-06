@@ -45,7 +45,15 @@ function ts() {
 async function sendToGeneral(guild, content) {
   try {
     const ch = await guild.channels.fetch(GENERAL_CHANNEL_ID).catch(() => null);
-    if (!ch) return;
+    if (!ch) {
+      console.log("General channel not found");
+      return;
+    }
+
+    if (!ch.isTextBased()) {
+      console.log("GENERAL_CHANNEL_ID is not a text channel:", ch.id, ch.name);
+      return;
+    }
 
     await ch.send({
       content,
@@ -118,9 +126,11 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
     const wasInLounge = oldChannel?.id === LOUNGE_VOICE_CHANNEL_ID;
     const isInLounge = newChannel?.id === LOUNGE_VOICE_CHANNEL_ID;
 
-    if (!wasInLounge && isInLounge) {
+    // joined lounge
+    if (!wasInLounge && isInLounge && newChannel) {
       const name = member.displayName || member.user.username;
 
+      console.log(`${name} joined lounge: ${newChannel.name} (${newChannel.id})`);
       await sendToGeneral(newState.guild, `😎 ${name} is loungin'.`);
 
       try {
@@ -149,8 +159,10 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
       }
     }
 
+    // left lounge
     if (wasInLounge && !isInLounge) {
       const name = member.displayName || member.user.username;
+      console.log(`${name} left lounge`);
       await sendToGeneral(oldState.guild, `🫡 ${name} has stopped loungin'.`);
     }
   } catch (err) {
