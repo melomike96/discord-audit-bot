@@ -3,6 +3,12 @@ const { Client, GatewayIntentBits, Partials, EmbedBuilder, MessageFlags } = requ
 const GENERAL_CHANNEL_ID = process.env.GENERAL_CHANNEL_ID; // #general text channel id
 const LOUNGE_VOICE_CHANNEL_ID = process.env.LOUNGE_VOICE_CHANNEL_ID; // voice channel to track
 const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID;
+const {
+  joinVoiceChannel,
+  createAudioPlayer,
+  createAudioResource,
+  AudioPlayerStatus
+} = require("@discordjs/voice");
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -58,7 +64,7 @@ async function sendLog(guild, title, fields = [], color = 0x2f3136) {
   }
 }
 
-client.once("ready", () => {
+client.once("clientReady", () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 });
 
@@ -88,29 +94,74 @@ client.on("guildMemberRemove", async (member) => {
     ],
     0xed4245
   );
-});
+ // Join loungin'.wav
+  client.on("voiceStateUpdate", async (oldState, newState) => {
 
-/* -----------------------
-   Voice state logging
------------------------- */
-client.on("voiceStateUpdate", async (oldState, newState) => {
   const member = newState.member || oldState.member;
-  if (!member) return;
+  if (!member || member.user.bot) return;
 
-  const oldCh = oldState.channel;
-  const newCh = newState.channel;
+  const oldChannel = oldState.channel;
+  const newChannel = newState.channel;
 
-  const wasInLounge = oldCh?.id === LOUNGE_VOICE_CHANNEL_ID;
-  const isInLounge = newCh?.id === LOUNGE_VOICE_CHANNEL_ID;
+  const wasInLounge = oldChannel?.id === LOUNGE_VOICE_CHANNEL_ID;
+  const isInLounge = newChannel?.id === LOUNGE_VOICE_CHANNEL_ID;
 
-  // Joined Lounge
+  /* -----------------------------
+     USER JOINED LOUNGE
+  ----------------------------- */
+
   if (!wasInLounge && isInLounge) {
-    const name = member.displayName || member.user.username;
-    await sendToGeneral(newState.guild, `😎 ${name} is loungin'.`);
 
-    // optional: play sound here (see next section)
+    const name = member.displayName || member.user.username;
+
+    await sendToGeneral(
+      newState.guild,
+      `😎 ${name} is loungin'.`
+    );
+
+    try {
+
+      const connection = joinVoiceChannel({
+        channelId: newChannel.id,
+        guildId: newChannel.guild.id,
+        adapterCreator: newChannel.guild.voiceAdapterCreator
+      });
+
+      const player = createAudioPlayer();
+
+      const resource = createAudioResource("./audio/loungin.wav");
+
+      player.play(resource);
+
+      connection.subscribe(player);
+
+      player.on(AudioPlayerStatus.Idle, () => {
+        connection.destroy();
+      });
+
+    } catch (err) {
+      console.log("Audio error:", err);
+    }
+
   }
 
+  /* -----------------------------
+     USER LEFT LOUNGE
+  ----------------------------- */
+
+  if (wasInLounge && !isInLounge) {
+
+    const name = member.displayName || member.user.username;
+
+    await sendToGeneral(
+      oldState.guild,
+      `🫡 ${name} has stopped loungin'.`
+    );
+
+  }
+
+});
+});
   // Left Lounge
   if (wasInLounge && !isInLounge) {
     const name = member.displayName || member.user.username;
@@ -230,31 +281,5 @@ client.on("messageReactionRemove", async (reaction, user) => {
   } catch (e) {
     console.error("reaction remove log failed:", e?.message || e);
   }
-});
-
-const { joinVoiceChannel, createAudioPlayer, createAudioResource } = require('@discordjs/voice');
-
-client.on("voiceStateUpdate", (oldState, newState) => {
-
-  const channel = newState.channel;
-
-  if (!channel) return;
-
-  if (channel.name === "Loungin") {
-
-    const connection = joinVoiceChannel({
-      channelId: channel.id,
-      guildId: channel.guild.id,
-      adapterCreator: channel.guild.voiceAdapterCreator,
-    });
-
-    const player = createAudioPlayer();
-    const resource = createAudioResource("./audio/loungin.wav");
-
-    player.play(resource);
-    connection.subscribe(player);
-
-  }
-
 });
 client.login(process.env.DISCORD_TOKEN);
