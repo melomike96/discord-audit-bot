@@ -79,9 +79,6 @@ client.once("clientReady", () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 });
 
-/* -----------------------
-   Server join / leave
------------------------- */
 client.on("guildMemberAdd", async (member) => {
   await sendLog(
     member.guild,
@@ -110,9 +107,6 @@ client.on("guildMemberRemove", async (member) => {
   );
 });
 
-/* -----------------------
-   Voice state logging + lounge audio
------------------------- */
 client.on("voiceStateUpdate", async (oldState, newState) => {
   try {
     const member = newState.member || oldState.member;
@@ -124,7 +118,6 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
     const wasInLounge = oldChannel?.id === LOUNGE_VOICE_CHANNEL_ID;
     const isInLounge = newChannel?.id === LOUNGE_VOICE_CHANNEL_ID;
 
-    // User joined lounge
     if (!wasInLounge && isInLounge) {
       const name = member.displayName || member.user.username;
 
@@ -156,7 +149,6 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
       }
     }
 
-    // User left lounge
     if (wasInLounge && !isInLounge) {
       const name = member.displayName || member.user.username;
       await sendToGeneral(oldState.guild, `🫡 ${name} has stopped loungin'.`);
@@ -166,9 +158,6 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
   }
 });
 
-/* -----------------------
-   Messages (create/edit/delete)
------------------------- */
 client.on("messageCreate", async (msg) => {
   if (!msg.guild) return;
   if (msg.author?.bot) return;
@@ -245,9 +234,6 @@ client.on("messageDelete", async (msg) => {
   );
 });
 
-/* -----------------------
-   Reactions add/remove
------------------------- */
 client.on("messageReactionAdd", async (reaction, user) => {
   try {
     if (user.bot) return;
