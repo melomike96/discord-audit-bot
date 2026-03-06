@@ -232,4 +232,29 @@ client.on("messageReactionRemove", async (reaction, user) => {
   }
 });
 
+const { joinVoiceChannel, createAudioPlayer, createAudioResource } = require('@discordjs/voice');
+
+client.on("voiceStateUpdate", (oldState, newState) => {
+
+  const channel = newState.channel;
+
+  if (!channel) return;
+
+  if (channel.name === "Loungin") {
+
+    const connection = joinVoiceChannel({
+      channelId: channel.id,
+      guildId: channel.guild.id,
+      adapterCreator: channel.guild.voiceAdapterCreator,
+    });
+
+    const player = createAudioPlayer();
+    const resource = createAudioResource("./audio/loungin.wav");
+
+    player.play(resource);
+    connection.subscribe(player);
+
+  }
+
+});
 client.login(process.env.DISCORD_TOKEN);
