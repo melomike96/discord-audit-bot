@@ -1,5 +1,8 @@
 require("dotenv").config();
 
+const ffmpeg = require("ffmpeg-static");
+process.env.FFMPEG_PATH = ffmpeg;
+
 const {
   Client,
   GatewayIntentBits,
@@ -83,6 +86,10 @@ client.once("clientReady", () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 });
 
+/*
+MEMBER JOIN / LEAVE
+*/
+
 client.on("guildMemberAdd", async (member) => {
   await sendLog(
     member.guild,
@@ -114,6 +121,7 @@ client.on("guildMemberRemove", async (member) => {
 /*
 VOICE LOUNGE HANDLER
 */
+
 client.on("voiceStateUpdate", async (oldState, newState) => {
   try {
     const member = newState.member || oldState.member;
@@ -140,9 +148,9 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
       });
 
       try {
-        await entersState(connection, VoiceConnectionStatus.Ready, 20000);
+        await entersState(connection, VoiceConnectionStatus.Ready, 15000);
       } catch {
-        console.log("Voice connection failed.");
+        console.log("Voice connection failed");
         connection.destroy();
         return;
       }
@@ -154,6 +162,7 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
       );
 
       connection.subscribe(player);
+
       player.play(resource);
 
       player.on(AudioPlayerStatus.Idle, () => {
@@ -177,8 +186,9 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
 });
 
 /*
-MESSAGE EVENTS
+MESSAGE LOGGING
 */
+
 client.on("messageCreate", async (msg) => {
   if (!msg.guild || msg.author?.bot) return;
 
