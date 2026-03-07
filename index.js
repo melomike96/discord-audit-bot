@@ -15,14 +15,6 @@ const {
   AudioPlayerStatus,
 } = require("@discordjs/voice");
 
-const connection = joinVoiceChannel({
-  channelId: newChannel.id,
-  guildId: newChannel.guild.id,
-  adapterCreator: newChannel.guild.voiceAdapterCreator,
-  selfDeaf: false,
-  selfMute: false,
-});
-
 const GENERAL_CHANNEL_ID = process.env.GENERAL_CHANNEL_ID;
 const LOUNGE_VOICE_CHANNEL_ID = process.env.LOUNGE_VOICE_CHANNEL_ID;
 const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID;
