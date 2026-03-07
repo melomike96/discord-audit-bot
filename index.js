@@ -164,7 +164,11 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
       connection.subscribe(player);
 
       player.play(resource);
-
+console.log("Creating audio resource from:", path.join(__dirname, "audio", "loungin.wav"));
+console.log("Subscribing player to connection");
+connection.subscribe(player);
+console.log("Starting playback");
+player.play(resource);
       player.on(AudioPlayerStatus.Idle, () => {
         connection.destroy();
       });
@@ -183,6 +187,9 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
   } catch (err) {
     console.error("voiceStateUpdate failed:", err);
   }
+  player.on("stateChange", (oldState, newState) => {
+  console.log(`Audio player state: ${oldState.status} -> ${newState.status}`);
+});
 });
 
 /*
