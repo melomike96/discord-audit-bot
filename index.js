@@ -134,11 +134,9 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
     const wasInLounge = oldChannel?.id === LOUNGE_VOICE_CHANNEL_ID;
     const isInLounge = newChannel?.id === LOUNGE_VOICE_CHANNEL_ID;
 
-    // joined lounge
     if (!wasInLounge && isInLounge && newChannel) {
       const name = member.displayName || member.user.username;
 
-      console.log(`${name} joined lounge: ${newChannel.name} (${newChannel.id})`);
       await sendToGeneral(newState.guild, `😎 ${name} is loungin'.`);
 
       try {
@@ -146,6 +144,8 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
           channelId: newChannel.id,
           guildId: newChannel.guild.id,
           adapterCreator: newChannel.guild.voiceAdapterCreator,
+          selfDeaf: false,
+          selfMute: false,
         });
 
         const player = createAudioPlayer();
@@ -167,17 +167,14 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
       }
     }
 
-    // left lounge
     if (wasInLounge && !isInLounge) {
       const name = member.displayName || member.user.username;
-      console.log(`${name} left lounge`);
       await sendToGeneral(oldState.guild, `🫡 ${name} has stopped loungin'.`);
     }
   } catch (err) {
     console.error("voiceStateUpdate failed:", err?.message || err);
   }
 });
-
 client.on("messageCreate", async (msg) => {
   if (!msg.guild) return;
   if (msg.author?.bot) return;
