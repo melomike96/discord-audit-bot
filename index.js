@@ -13,7 +13,11 @@ const {
   createAudioPlayer,
   createAudioResource,
   AudioPlayerStatus,
+  entersState,
+  VoiceConnectionStatus,
 } = require("@discordjs/voice");
+
+const path = require("path");
 
 const GENERAL_CHANNEL_ID = process.env.GENERAL_CHANNEL_ID;
 const LOUNGE_VOICE_CHANNEL_ID = process.env.LOUNGE_VOICE_CHANNEL_ID;
@@ -45,15 +49,7 @@ function ts() {
 async function sendToGeneral(guild, content) {
   try {
     const ch = await guild.channels.fetch(GENERAL_CHANNEL_ID).catch(() => null);
-    if (!ch) {
-      console.log("General channel not found");
-      return;
-    }
-
-    if (!ch.isTextBased()) {
-      console.log("GENERAL_CHANNEL_ID is not a text channel:", ch.id, ch.name);
-      return;
-    }
+    if (!ch || !ch.isTextBased()) return;
 
     await ch.send({
       content,
@@ -61,7 +57,7 @@ async function sendToGeneral(guild, content) {
       flags: MessageFlags?.SuppressNotifications ?? 4096,
     });
   } catch (e) {
-    console.error("sendToGeneral failed:", e?.message || e);
+    console.error("sendToGeneral failed:", e);
   }
 }
 
@@ -79,7 +75,7 @@ async function sendLog(guild, title, fields = [], color = 0x2f3136) {
 
     await ch.send({ embeds: [embed] });
   } catch (e) {
-    console.error("Log send failed:", e?.message || e);
+    console.error("Log send failed:", e);
   }
 }
 
@@ -115,6 +111,9 @@ client.on("guildMemberRemove", async (member) => {
   );
 });
 
+/*
+VOICE LOUNGE HANDLER
+*/
 client.on("voiceStateUpdate", async (oldState, newState) => {
   try {
     const member = newState.member || oldState.member;
@@ -127,51 +126,63 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
     const isInLounge = newChannel?.id === LOUNGE_VOICE_CHANNEL_ID;
 
     if (!wasInLounge && isInLounge && newChannel) {
+
       const name = member.displayName || member.user.username;
 
       await sendToGeneral(newState.guild, `😎 ${name} is loungin'.`);
 
+      const connection = joinVoiceChannel({
+        channelId: newChannel.id,
+        guildId: newChannel.guild.id,
+        adapterCreator: newChannel.guild.voiceAdapterCreator,
+        selfDeaf: false,
+        selfMute: false,
+      });
+
       try {
-        const connection = joinVoiceChannel({
-          channelId: newChannel.id,
-          guildId: newChannel.guild.id,
-          adapterCreator: newChannel.guild.voiceAdapterCreator,
-          selfDeaf: false,
-          selfMute: false,
-        });
-
-        const player = createAudioPlayer();
-        const resource = createAudioResource("./audio/loungin.wav");
-
-        connection.subscribe(player);
-        player.play(resource);
-
-        player.on(AudioPlayerStatus.Idle, () => {
-          connection.destroy();
-        });
-
-        player.on("error", (err) => {
-          console.error("Audio player error:", err?.message || err);
-          connection.destroy();
-        });
-      } catch (err) {
-        console.error("Audio error:", err?.message || err);
+        await entersState(connection, VoiceConnectionStatus.Ready, 20000);
+      } catch {
+        console.log("Voice connection failed.");
+        connection.destroy();
+        return;
       }
+
+      const player = createAudioPlayer();
+
+      const resource = createAudioResource(
+        path.join(__dirname, "audio", "loungin.wav")
+      );
+
+      connection.subscribe(player);
+      player.play(resource);
+
+      player.on(AudioPlayerStatus.Idle, () => {
+        connection.destroy();
+      });
+
+      player.on("error", (err) => {
+        console.error("Audio player error:", err);
+        connection.destroy();
+      });
     }
 
     if (wasInLounge && !isInLounge) {
       const name = member.displayName || member.user.username;
       await sendToGeneral(oldState.guild, `🫡 ${name} has stopped loungin'.`);
     }
+
   } catch (err) {
-    console.error("voiceStateUpdate failed:", err?.message || err);
+    console.error("voiceStateUpdate failed:", err);
   }
 });
-client.on("messageCreate", async (msg) => {
-  if (!msg.guild) return;
-  if (msg.author?.bot) return;
 
-  const snippet = msg.content?.length ? msg.content.slice(0, 200) : "[no text]";
+/*
+MESSAGE EVENTS
+*/
+client.on("messageCreate", async (msg) => {
+  if (!msg.guild || msg.author?.bot) return;
+
+  const snippet = msg.content?.slice(0, 200) || "[no text]";
 
   await sendLog(
     msg.guild,
@@ -180,115 +191,10 @@ client.on("messageCreate", async (msg) => {
       { name: "Author", value: `${msg.author.tag} (${msg.author.id})`, inline: false },
       { name: "Channel", value: `<#${msg.channelId}>`, inline: true },
       { name: "Jump", value: `[Open Message](${msg.url})`, inline: true },
-      { name: "Content", value: "```" + snippet.replace(/```/g, "'''") + "```", inline: false },
+      { name: "Content", value: "```" + snippet + "```", inline: false },
     ],
     0x2ecc71
   );
-});
-
-client.on("messageUpdate", async (oldMsg, newMsg) => {
-  if (!newMsg.guild) return;
-  if (newMsg.author?.bot) return;
-
-  const oldText = oldMsg?.content ?? "[unknown/partial]";
-  const newText = newMsg?.content ?? "[unknown/partial]";
-  if (oldText === newText) return;
-
-  await sendLog(
-    newMsg.guild,
-    "📝 Message Edited",
-    [
-      {
-        name: "Author",
-        value: `${newMsg.author?.tag ?? "Unknown"} (${newMsg.author?.id ?? "?"})`,
-        inline: false,
-      },
-      { name: "Channel", value: `<#${newMsg.channelId}>`, inline: true },
-      { name: "Jump", value: newMsg.url ? `[Open Message](${newMsg.url})` : "N/A", inline: true },
-      {
-        name: "Before",
-        value: "```" + String(oldText).slice(0, 200).replace(/```/g, "'''") + "```",
-        inline: false,
-      },
-      {
-        name: "After",
-        value: "```" + String(newText).slice(0, 200).replace(/```/g, "'''") + "```",
-        inline: false,
-      },
-    ],
-    0xf1c40f
-  );
-});
-
-client.on("messageDelete", async (msg) => {
-  if (!msg.guild) return;
-  if (msg.author?.bot) return;
-
-  const snippet = msg.content?.length ? msg.content.slice(0, 200) : "[no text or partial]";
-
-  await sendLog(
-    msg.guild,
-    "🗑️ Message Deleted",
-    [
-      {
-        name: "Author",
-        value: msg.author ? `${msg.author.tag} (${msg.author.id})` : "Unknown (partial)",
-        inline: false,
-      },
-      { name: "Channel", value: `<#${msg.channelId}>`, inline: true },
-      { name: "Content", value: "```" + snippet.replace(/```/g, "'''") + "```", inline: false },
-      { name: "Time", value: ts(), inline: false },
-    ],
-    0xe74c3c
-  );
-});
-
-client.on("messageReactionAdd", async (reaction, user) => {
-  try {
-    if (user.bot) return;
-    if (reaction.partial) await reaction.fetch();
-
-    const msg = reaction.message;
-    if (!msg.guild) return;
-
-    await sendLog(
-      msg.guild,
-      "➕ Reaction Added",
-      [
-        { name: "User", value: `${user.tag} (${user.id})`, inline: false },
-        { name: "Emoji", value: `${reaction.emoji}`, inline: true },
-        { name: "Channel", value: `<#${msg.channelId}>`, inline: true },
-        { name: "Jump", value: msg.url ? `[Open Message](${msg.url})` : "N/A", inline: false },
-      ],
-      0x9b59b6
-    );
-  } catch (e) {
-    console.error("reaction add log failed:", e?.message || e);
-  }
-});
-
-client.on("messageReactionRemove", async (reaction, user) => {
-  try {
-    if (user.bot) return;
-    if (reaction.partial) await reaction.fetch();
-
-    const msg = reaction.message;
-    if (!msg.guild) return;
-
-    await sendLog(
-      msg.guild,
-      "➖ Reaction Removed",
-      [
-        { name: "User", value: `${user.tag} (${user.id})`, inline: false },
-        { name: "Emoji", value: `${reaction.emoji}`, inline: true },
-        { name: "Channel", value: `<#${msg.channelId}>`, inline: true },
-        { name: "Jump", value: msg.url ? `[Open Message](${msg.url})` : "N/A", inline: false },
-      ],
-      0x8e44ad
-    );
-  } catch (e) {
-    console.error("reaction remove log failed:", e?.message || e);
-  }
 });
 
 client.login(process.env.DISCORD_TOKEN);
