@@ -12,6 +12,7 @@ const {
   getCurrentTrack,
   hasActiveSession,
 } = require("./radio");
+const { addTrackFromYoutube } = require("./youtubeService");
 
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const GENERAL_CHANNEL_ID = process.env.GENERAL_CHANNEL_ID;
@@ -64,6 +65,29 @@ client.once("clientReady", () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
   console.log("===== BOT READY =====");
 });
+
+function parseAddTrackCommand(content) {
+  const match = content.match(/^!addtrack\s+(.+)$/i);
+  if (!match) return null;
+
+  return match[1].trim();
+}
+
+function isYoutubeUrl(value) {
+  try {
+    const parsed = new URL(value);
+    const host = parsed.hostname.toLowerCase();
+
+    return (
+      host === "youtube.com" ||
+      host.endsWith(".youtube.com") ||
+      host === "youtu.be" ||
+      host.endsWith(".youtu.be")
+    );
+  } catch {
+    return false;
+  }
+}
 
 client.on("messageCreate", async (message) => {
   try {
@@ -126,6 +150,38 @@ client.on("messageCreate", async (message) => {
       return;
     }
 
+    if (/^!addtrack\b/i.test(content) && !parseAddTrackCommand(content)) {
+      await message.reply("Please provide a YouTube link. Example: `!addtrack https://www.youtube.com/watch?v=dQw4w9WgXcQ`");
+      return;
+    }
+
+    const addTrackUrl = parseAddTrackCommand(content);
+    if (addTrackUrl) {
+      console.log(`!addtrack received from ${message.author.username}`);
+
+      if (!isYoutubeUrl(addTrackUrl)) {
+        await message.reply("That doesn't look like a valid YouTube link. Please use a `youtube.com` or `youtu.be` URL.");
+        return;
+      }
+
+      await message.reply("🎧 Got it — processing your YouTube track now...");
+
+      try {
+        const result = await addTrackFromYoutube({
+          url: addTrackUrl,
+          addedBy: message.author.username,
+        });
+
+        await message.reply(
+          `✅ Added **${result.normalizedTitle}** to the lounge queue/library (requested by ${message.author.username}).`
+        );
+      } catch (error) {
+        await message.reply(`❌ Couldn't add that track: ${error.message}`);
+      }
+
+      return;
+    }
+
     if (content === "!help") {
       await message.reply(
         [
@@ -134,6 +190,7 @@ client.on("messageCreate", async (message) => {
           "`!stop` - stop radio",
           "`!skip` - skip current track",
           "`!track` - show current track",
+          "`!addtrack <youtubeLink>` - submit a YouTube track",
         ].join("\n")
       );
     }
