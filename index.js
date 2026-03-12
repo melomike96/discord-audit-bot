@@ -88,7 +88,7 @@ client.on("messageCreate", async (message) => {
 
       console.log(`!start received from ${message.author.username} in ${voiceChannel.name}`);
 
-      await message.reply(`Starting Melo Lounge radio in **${voiceChannel.name}**...`);
+      await message.reply(`DJ Loungin' has started spinnin in **${voiceChannel.name}**.`);
 
       startLoungeSession({
         guild: message.guild,
@@ -102,14 +102,19 @@ client.on("messageCreate", async (message) => {
     if (content === "!stop") {
       console.log(`!stop received from ${message.author.username}`);
       stopLoungeSession();
-      await message.reply("Stopped Melo Lounge radio.");
+      await message.reply("DJ Loungin' has been booed off stage.");
       return;
     }
 
     if (content === "!skip") {
       console.log(`!skip received from ${message.author.username}`);
+      const currentTrack = getCurrentTrack();
       const skipped = skipCurrentTrack();
-      await message.reply(skipped ? "Skipped current track." : "Nothing to skip.");
+      await message.reply(
+        skipped && currentTrack
+          ? `Skipping **${currentTrack.name}**.`
+          : "Nothing to skip."
+      );
       return;
     }
 

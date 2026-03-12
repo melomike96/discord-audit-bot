@@ -21,6 +21,33 @@ const state = {
   recentlyPlayed: [],
 };
 
+const TRACK_NAME_MAP = {
+  "93til": "Souls of Mischief - 93 'til Infinity",
+  "black sheep - without a doubt": "Black Sheep - Without a Doubt",
+  checkthetechnique: "Gang Starr - Check the Technique",
+  lifesaver: "Guru - Lifesaver",
+  "souls of mischief - cab fare (best quality) hq-640x360-avc1-opus":
+    "Souls of Mischief - Cab Fare",
+  "the lab rats - fluid-480x360-avc1-mp4a": "The Lab Rats - Fluid",
+  theworldisyours: "Nas - The World Is Yours",
+};
+
+function getCleanTrackName(fileName) {
+  const baseName = path.parse(fileName).name;
+  const mappedName = TRACK_NAME_MAP[baseName.toLowerCase()];
+
+  if (mappedName) {
+    return mappedName;
+  }
+
+  return baseName
+    .replace(/[-_](\d+x\d+|avc1|mp4a|opus)$/gi, "")
+    .replace(/\s*\((.*?)\)\s*/g, " ")
+    .replace(/[_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function getLibraryTracks() {
   const libraryDir = path.join(__dirname, "audio", "library");
 
@@ -30,7 +57,8 @@ function getLibraryTracks() {
     .readdirSync(libraryDir)
     .filter((file) => file.toLowerCase().endsWith(".wav"))
     .map((file) => ({
-      name: file,
+      fileName: file,
+      name: getCleanTrackName(file),
       fullPath: path.join(libraryDir, file),
     }));
 }
@@ -40,7 +68,7 @@ function getRandomLibraryTrackNoRepeat() {
   if (!tracks.length) return null;
 
   let available = tracks.filter(
-    (track) => !state.recentlyPlayed.includes(track.name)
+    (track) => !state.recentlyPlayed.includes(track.fileName)
   );
 
   if (!available.length) {
@@ -49,7 +77,7 @@ function getRandomLibraryTrackNoRepeat() {
   }
 
   const selected = available[Math.floor(Math.random() * available.length)];
-  state.recentlyPlayed.push(selected.name);
+  state.recentlyPlayed.push(selected.fileName);
 
   if (state.recentlyPlayed.length > 5) {
     state.recentlyPlayed.shift();
