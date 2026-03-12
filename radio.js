@@ -13,6 +13,7 @@ const state = {
   connection: null,
   player: null,
   currentTrack: null,
+  currentAudioLabel: null,
   isPlaying: false,
   stopRequested: false,
   skipRequested: false,
@@ -145,12 +146,14 @@ async function startLoungeSession({ guild, voiceChannel, introPath = null }) {
 
     while (!state.stopRequested) {
       if (introPath && fs.existsSync(introPath)) {
+        state.currentAudioLabel = "DJ Loungin' Intro";
         console.log("Playing intro sound first");
         try {
           await playFile(introPath);
         } catch (err) {
           console.error("Intro playback failed:", err);
         }
+        state.currentAudioLabel = null;
         introPath = null;
       }
 
@@ -161,6 +164,7 @@ async function startLoungeSession({ guild, voiceChannel, introPath = null }) {
       }
 
       state.currentTrack = track;
+      state.currentAudioLabel = track.name;
       state.skipRequested = false;
 
       console.log("Random track chosen:", track.name);
@@ -170,6 +174,8 @@ async function startLoungeSession({ guild, voiceChannel, introPath = null }) {
       } catch (err) {
         console.error("Track playback failed:", err);
       }
+
+      state.currentAudioLabel = null;
 
       if (state.stopRequested) break;
     }
@@ -194,18 +200,18 @@ function stopLoungeSession() {
 }
 
 function skipCurrentTrack() {
-  if (!state.player || !state.currentTrack) {
-    return false;
+  if (!state.player || !state.currentAudioLabel) {
+    return null;
   }
 
-  console.log("Skip requested for:", state.currentTrack.name);
+  console.log("Skip requested for:", state.currentAudioLabel);
   state.skipRequested = true;
 
   try {
     state.player.stop(true);
-    return true;
+    return state.currentAudioLabel;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -227,6 +233,7 @@ function cleanupSession() {
   state.connection = null;
   state.player = null;
   state.currentTrack = null;
+  state.currentAudioLabel = null;
   state.isPlaying = false;
   state.stopRequested = false;
   state.skipRequested = false;

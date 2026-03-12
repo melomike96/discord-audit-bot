@@ -108,11 +108,10 @@ client.on("messageCreate", async (message) => {
 
     if (content === "!skip") {
       console.log(`!skip received from ${message.author.username}`);
-      const currentTrack = getCurrentTrack();
       const skipped = skipCurrentTrack();
       await message.reply(
-        skipped && currentTrack
-          ? `Skipping **${currentTrack.name}**.`
+        skipped
+          ? `Skipping **${skipped}**.`
           : "Nothing to skip."
       );
       return;
