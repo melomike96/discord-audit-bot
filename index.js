@@ -14,6 +14,7 @@ const {
   getCurrentTrack,
   hasActiveSession,
 } = require("./radio");
+const { addTrackFromYoutube } = require("./youtubeService");
 
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const GENERAL_CHANNEL_ID = process.env.GENERAL_CHANNEL_ID;
