@@ -5,6 +5,8 @@ console.log("===== BOT STARTING =====");
 const path = require("path");
 const { Client, GatewayIntentBits } = require("discord.js");
 
+const { addTrackFromUrl, AddTrackError } = require("./audio/library/addTrackService");
+
 const {
   startLoungeSession,
   stopLoungeSession,
@@ -65,6 +67,7 @@ client.once("clientReady", () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
   console.log("===== BOT READY =====");
 });
+
 
 function parseAddTrackCommand(content) {
   const match = content.match(/^!addtrack\s+(.+)$/i);
@@ -167,16 +170,16 @@ client.on("messageCreate", async (message) => {
       await message.reply("🎧 Got it — processing your YouTube track now...");
 
       try {
-        const result = await addTrackFromYoutube({
-          url: addTrackUrl,
-          addedBy: message.author.username,
-        });
-
-        await message.reply(
-          `✅ Added **${result.normalizedTitle}** to the lounge queue/library (requested by ${message.author.username}).`
-        );
+        const added = await addTrackFromUrl(addTrackUrl);
+        await message.reply(`✅ Added **${added.title}** to the lounge library.`);
       } catch (error) {
-        await message.reply(`❌ Couldn't add that track: ${error.message}`);
+        if (error instanceof AddTrackError) {
+          console.error("addTrack failed:", error.message, error.details || "");
+          await message.reply(`❌ ${error.userMessage}`);
+        } else {
+          console.error("addTrack unexpected failure:", error);
+          await message.reply("❌ Couldn't add that track due to an unexpected error.");
+        }
       }
 
       return;

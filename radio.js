@@ -33,6 +33,8 @@ const TRACK_NAME_MAP = {
   theworldisyours: "Nas - The World Is Yours",
 };
 
+const LIBRARY_JSON_PATH = path.join(__dirname, "audio", "library", "library.json");
+
 function getCleanTrackName(fileName) {
   const baseName = path.parse(fileName).name;
   const mappedName = TRACK_NAME_MAP[baseName.toLowerCase()];
@@ -53,6 +55,30 @@ function getLibraryTracks() {
   const libraryDir = path.join(__dirname, "audio", "library");
 
   if (!fs.existsSync(libraryDir)) return [];
+
+  if (fs.existsSync(LIBRARY_JSON_PATH)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(LIBRARY_JSON_PATH, "utf8"));
+      const tracks = Array.isArray(parsed) ? parsed : parsed?.tracks;
+
+      if (Array.isArray(tracks)) {
+        return tracks
+          .filter((track) => track?.status === "ready" && track?.fileName)
+          .map((track) => {
+            const fullPath = path.join(libraryDir, track.fileName);
+
+            return {
+              fileName: track.fileName,
+              name: track.title || getCleanTrackName(track.fileName),
+              fullPath,
+            };
+          })
+          .filter((track) => fs.existsSync(track.fullPath));
+      }
+    } catch (error) {
+      console.error("Failed to read library.json; falling back to wav scan:", error.message);
+    }
+  }
 
   return fs
     .readdirSync(libraryDir)

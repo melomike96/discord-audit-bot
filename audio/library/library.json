@@ -1,0 +1,81 @@
+{
+  "tracks": [
+    {
+      "id": "black-sheep---without-a-",
+      "title": "Black Sheep - Without a Doubt",
+      "canonicalUrl": null,
+      "sourceUrl": null,
+      "uploader": null,
+      "durationSeconds": null,
+      "fileName": "Black Sheep - Without a Doubt.wav",
+      "status": "ready",
+      "addedAt": null
+    },
+    {
+      "id": "gang-starr---check-the-t",
+      "title": "Gang Starr - Check the Technique",
+      "canonicalUrl": null,
+      "sourceUrl": null,
+      "uploader": null,
+      "durationSeconds": null,
+      "fileName": "Gang Starr - Check the Technique.wav",
+      "status": "ready",
+      "addedAt": null
+    },
+    {
+      "id": "guru---lifesaver",
+      "title": "Guru - Lifesaver",
+      "canonicalUrl": null,
+      "sourceUrl": null,
+      "uploader": null,
+      "durationSeconds": null,
+      "fileName": "Guru - Lifesaver.wav",
+      "status": "ready",
+      "addedAt": null
+    },
+    {
+      "id": "nas---the-world-is-yours",
+      "title": "Nas - The World Is Yours",
+      "canonicalUrl": null,
+      "sourceUrl": null,
+      "uploader": null,
+      "durationSeconds": null,
+      "fileName": "Nas - The World Is Yours.wav",
+      "status": "ready",
+      "addedAt": null
+    },
+    {
+      "id": "souls-of-mischief---93-'",
+      "title": "Souls of Mischief - 93 'til Infinity",
+      "canonicalUrl": null,
+      "sourceUrl": null,
+      "uploader": null,
+      "durationSeconds": null,
+      "fileName": "Souls of Mischief - 93 'til Infinity.wav",
+      "status": "ready",
+      "addedAt": null
+    },
+    {
+      "id": "souls-of-mischief---cab-",
+      "title": "Souls of Mischief - Cab Fare",
+      "canonicalUrl": null,
+      "sourceUrl": null,
+      "uploader": null,
+      "durationSeconds": null,
+      "fileName": "Souls of Mischief - Cab Fare.wav",
+      "status": "ready",
+      "addedAt": null
+    },
+    {
+      "id": "the-lab-rats---fluid",
+      "title": "The Lab Rats - Fluid",
+      "canonicalUrl": null,
+      "sourceUrl": null,
+      "uploader": null,
+      "durationSeconds": null,
+      "fileName": "The Lab Rats - Fluid.wav",
+      "status": "ready",
+      "addedAt": null
+    }
+  ]
+}
