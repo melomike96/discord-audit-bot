@@ -2,6 +2,7 @@ require("dotenv").config();
 
 console.log("===== BOT STARTING =====");
 
+const fs = require("fs");
 const path = require("path");
 const { Client, GatewayIntentBits } = require("discord.js");
 
@@ -16,10 +17,75 @@ const {
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const GENERAL_CHANNEL_ID = process.env.GENERAL_CHANNEL_ID;
 const PRIVATE_VOICE_CHANNEL_ID = process.env.PRIVATE_VOICE_CHANNEL_ID;
+const LOCK_PATH = path.join(__dirname, ".bot.lock");
 
 console.log("Loaded ENV:");
 console.log("GENERAL_CHANNEL_ID:", GENERAL_CHANNEL_ID || "(not set)");
 console.log("PRIVATE_VOICE_CHANNEL_ID:", PRIVATE_VOICE_CHANNEL_ID || "(not set)");
+
+function isProcessRunning(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function removeProcessLock() {
+  try {
+    if (!fs.existsSync(LOCK_PATH)) return;
+
+    const lock = JSON.parse(fs.readFileSync(LOCK_PATH, "utf8"));
+    if (lock.pid === process.pid) {
+      fs.unlinkSync(LOCK_PATH);
+    }
+  } catch (err) {
+    console.error("Failed to remove process lock:", err);
+  }
+}
+
+function ensureSingleInstance() {
+  try {
+    if (fs.existsSync(LOCK_PATH)) {
+      const existingLock = JSON.parse(fs.readFileSync(LOCK_PATH, "utf8"));
+
+      if (existingLock.pid && isProcessRunning(existingLock.pid)) {
+        console.error(
+          `Another bot process is already running with PID ${existingLock.pid}. Exiting.`
+        );
+        process.exit(1);
+      }
+    }
+
+    fs.writeFileSync(
+      LOCK_PATH,
+      JSON.stringify(
+        {
+          pid: process.pid,
+          startedAt: new Date().toISOString(),
+        },
+        null,
+        2
+      )
+    );
+  } catch (err) {
+    console.error("Failed to create process lock:", err);
+    process.exit(1);
+  }
+}
+
+ensureSingleInstance();
+
+process.on("exit", removeProcessLock);
+process.on("SIGINT", () => {
+  removeProcessLock();
+  process.exit(0);
+});
+process.on("SIGTERM", () => {
+  removeProcessLock();
+  process.exit(0);
+});
 
 const client = new Client({
   intents: [
