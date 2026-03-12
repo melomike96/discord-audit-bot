@@ -6,6 +6,8 @@ const fs = require("fs");
 const path = require("path");
 const { Client, GatewayIntentBits } = require("discord.js");
 
+const { addTrackFromUrl, AddTrackError } = require("./audio/library/addTrackService");
+
 const {
   startLoungeSession,
   stopLoungeSession,
@@ -13,6 +15,7 @@ const {
   getCurrentTrack,
   hasActiveSession,
 } = require("./radio");
+const { addTrackFromYoutube } = require("./youtubeService");
 
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const GENERAL_CHANNEL_ID = process.env.GENERAL_CHANNEL_ID;
@@ -131,6 +134,30 @@ client.once("clientReady", () => {
   console.log("===== BOT READY =====");
 });
 
+
+function parseAddTrackCommand(content) {
+  const match = content.match(/^!addtrack\s+(.+)$/i);
+  if (!match) return null;
+
+  return match[1].trim();
+}
+
+function isYoutubeUrl(value) {
+  try {
+    const parsed = new URL(value);
+    const host = parsed.hostname.toLowerCase();
+
+    return (
+      host === "youtube.com" ||
+      host.endsWith(".youtube.com") ||
+      host === "youtu.be" ||
+      host.endsWith(".youtu.be")
+    );
+  } catch {
+    return false;
+  }
+}
+
 client.on("messageCreate", async (message) => {
   try {
     if (message.author.bot || !message.guild) return;
@@ -192,6 +219,38 @@ client.on("messageCreate", async (message) => {
       return;
     }
 
+    if (/^!addtrack\b/i.test(content) && !parseAddTrackCommand(content)) {
+      await message.reply("Please provide a YouTube link. Example: `!addtrack https://www.youtube.com/watch?v=dQw4w9WgXcQ`");
+      return;
+    }
+
+    const addTrackUrl = parseAddTrackCommand(content);
+    if (addTrackUrl) {
+      console.log(`!addtrack received from ${message.author.username}`);
+
+      if (!isYoutubeUrl(addTrackUrl)) {
+        await message.reply("That doesn't look like a valid YouTube link. Please use a `youtube.com` or `youtu.be` URL.");
+        return;
+      }
+
+      await message.reply("🎧 Got it — processing your YouTube track now...");
+
+      try {
+        const added = await addTrackFromUrl(addTrackUrl);
+        await message.reply(`✅ Added **${added.title}** to the lounge library.`);
+      } catch (error) {
+        if (error instanceof AddTrackError) {
+          console.error("addTrack failed:", error.message, error.details || "");
+          await message.reply(`❌ ${error.userMessage}`);
+        } else {
+          console.error("addTrack unexpected failure:", error);
+          await message.reply("❌ Couldn't add that track due to an unexpected error.");
+        }
+      }
+
+      return;
+    }
+
     if (content === "!help") {
       await message.reply(
         [
@@ -200,6 +259,7 @@ client.on("messageCreate", async (message) => {
           "`!stop` - stop radio",
           "`!skip` - skip current track",
           "`!track` - show current track",
+          "`!addtrack <youtubeLink>` - submit a YouTube track",
         ].join("\n")
       );
     }
