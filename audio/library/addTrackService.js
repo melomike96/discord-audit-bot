@@ -116,6 +116,18 @@ function getYtDlpCommand() {
   );
 }
 
+function getNodeJsRuntimeArg() {
+  const nodeCommand = resolveCommand(["node"], {
+    paths: [process.execPath],
+  });
+
+  if (!nodeCommand) {
+    return null;
+  }
+
+  return `node:${nodeCommand}`;
+}
+
 function ensureRuntimeDir() {
   if (!fs.existsSync(RUNTIME_DIR)) {
     fs.mkdirSync(RUNTIME_DIR, { recursive: true });
@@ -169,6 +181,7 @@ function resolveCookiesPath() {
 function buildYtDlpArgs(baseArgs) {
   const args = [];
   const cookiesPath = resolveCookiesPath();
+  const nodeJsRuntime = getNodeJsRuntimeArg();
 
   if (cookiesPath) {
     args.push("--cookies", cookiesPath);
@@ -178,7 +191,35 @@ function buildYtDlpArgs(baseArgs) {
     args.push("--user-agent", process.env.YT_DLP_USER_AGENT);
   }
 
+  if (nodeJsRuntime) {
+    args.push("--js-runtimes", nodeJsRuntime);
+  }
+
   return [...args, ...baseArgs];
+}
+
+function getYtDlpConfigSummary() {
+  let cookiesStatus = "disabled";
+  let cookiesPath = null;
+
+  try {
+    cookiesPath = resolveCookiesPath();
+    if (cookiesPath) {
+      cookiesStatus = `enabled (${cookiesPath})`;
+    }
+  } catch (error) {
+    cookiesStatus = `invalid (${error.message})`;
+  }
+
+  return {
+    ytDlpCommand: resolveCommand(["yt-dlp", "yt_dlp"], {
+      envVar: "YT_DLP_PATH",
+      paths: LOCAL_YT_DLP_CANDIDATES,
+    }) || null,
+    cookiesStatus,
+    userAgentConfigured: Boolean(process.env.YT_DLP_USER_AGENT),
+    jsRuntime: getNodeJsRuntimeArg() || "unavailable",
+  };
 }
 
 function runCommand(command, args) {
@@ -244,10 +285,32 @@ async function fetchVideoMetadata(ytDlpCommand, canonicalUrl) {
       webpageUrl: metadata.webpage_url || canonicalUrl,
     };
   } catch (error) {
+    const details = error.message || "";
+    const cookiesInvalid =
+      details.includes("The provided YouTube account cookies are no longer valid");
+    const requiresAuth =
+      details.includes("Sign in to confirm you're not a bot");
+    const missingJsRuntime =
+      details.includes("No supported JavaScript runtime could be found");
+
+    let userMessage =
+      "Could not read metadata from YouTube URL. Confirm the link is public and try again.";
+
+    if (cookiesInvalid) {
+      userMessage =
+        "The bot's YouTube cookies have expired or were rotated. Ask an admin to refresh them and try again.";
+    } else if (requiresAuth) {
+      userMessage =
+        "YouTube blocked this request as a bot check. Ask an admin to refresh yt-dlp cookies or try a different video.";
+    } else if (missingJsRuntime) {
+      userMessage =
+        "yt-dlp could not find a supported JavaScript runtime on the host. Ask an admin to check the bot deploy logs.";
+    }
+
     throw new AddTrackError(
       "Failed to fetch video metadata",
-      "Could not read metadata from YouTube URL. Confirm the link is public and try again.",
-      error.message
+      userMessage,
+      details
     );
   }
 }
@@ -369,4 +432,5 @@ module.exports = {
   normalizeYouTubeUrl,
   AddTrackError,
   LIBRARY_JSON_PATH,
+  getYtDlpConfigSummary,
 };

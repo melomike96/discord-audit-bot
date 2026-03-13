@@ -6,7 +6,11 @@ const fs = require("fs");
 const path = require("path");
 const { Client, GatewayIntentBits } = require("discord.js");
 
-const { addTrackFromUrl, AddTrackError } = require("./audio/library/addTrackService");
+const {
+  addTrackFromUrl,
+  AddTrackError,
+  getYtDlpConfigSummary,
+} = require("./audio/library/addTrackService");
 const { resolveCommand } = require("./audio/library/resolveCommand");
 
 const {
@@ -90,6 +94,9 @@ if (!resolveCommand(["yt-dlp", "yt_dlp"], {
   paths: LOCAL_YT_DLP_CANDIDATES,
 })) {
   console.warn("WARNING: yt-dlp is not installed. `!addtrack` will not work until it is installed and available on PATH.");
+} else {
+  const ytDlpConfig = getYtDlpConfigSummary();
+  console.log("yt-dlp config:", ytDlpConfig);
 }
 
 process.on("exit", removeProcessLock);
