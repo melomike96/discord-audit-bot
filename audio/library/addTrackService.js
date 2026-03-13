@@ -3,6 +3,7 @@ const path = require("path");
 const crypto = require("crypto");
 const os = require("os");
 const { spawn } = require("child_process");
+const https = require("https");
 const ffmpegPath = require("ffmpeg-static");
 const { resolveCommand } = require("./resolveCommand");
 
@@ -61,6 +62,145 @@ function loadLibraryCatalog() {
 
 function saveLibraryCatalog(catalog) {
   fs.writeFileSync(LIBRARY_JSON_PATH, `${JSON.stringify(catalog, null, 2)}\n`, "utf8");
+}
+
+function listReadyTracks() {
+  const catalog = loadLibraryCatalog();
+  return catalog.tracks.filter((track) => track?.status === "ready");
+}
+
+function githubApiRequest({ method, requestPath, token, body }) {
+  return new Promise((resolve, reject) => {
+    const payload = body ? JSON.stringify(body) : null;
+    const req = https.request(
+      {
+        hostname: "api.github.com",
+        method,
+        path: requestPath,
+        headers: {
+          "User-Agent": "discord-audit-bot",
+          Accept: "application/vnd.github+json",
+          Authorization: `Bearer ${token}`,
+          "X-GitHub-Api-Version": "2022-11-28",
+          ...(payload ? { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload) } : {}),
+        },
+      },
+      (res) => {
+        let responseBody = "";
+        res.on("data", (chunk) => {
+          responseBody += chunk.toString("utf8");
+        });
+        res.on("end", () => {
+          const statusCode = res.statusCode || 0;
+          if (statusCode >= 200 && statusCode < 300) {
+            if (!responseBody) {
+              resolve({});
+              return;
+            }
+
+            try {
+              resolve(JSON.parse(responseBody));
+            } catch {
+              resolve({ raw: responseBody });
+            }
+            return;
+          }
+
+          reject(new Error(`GitHub API ${method} ${requestPath} failed with status ${statusCode}: ${responseBody}`));
+        });
+      }
+    );
+
+    req.on("error", (error) => {
+      reject(error);
+    });
+
+    if (payload) {
+      req.write(payload);
+    }
+
+    req.end();
+  });
+}
+
+function getGithubSyncConfig() {
+  const token = process.env.GITHUB_SYNC_TOKEN;
+  const repo = process.env.GITHUB_SYNC_REPO;
+  const branch = process.env.GITHUB_SYNC_BRANCH || "main";
+  const filePath = process.env.GITHUB_SYNC_FILE_PATH || "audio/library/library.json";
+
+  if (!token || !repo) {
+    return null;
+  }
+
+  return { token, repo, branch, filePath };
+}
+
+async function fetchCatalogFromGithub() {
+  const config = getGithubSyncConfig();
+  if (!config) {
+    return null;
+  }
+
+  const encodedPath = encodeURIComponent(config.filePath).replace(/%2F/g, "/");
+
+  try {
+    const response = await githubApiRequest({
+      method: "GET",
+      requestPath: `/repos/${config.repo}/contents/${encodedPath}?ref=${encodeURIComponent(config.branch)}`,
+      token: config.token,
+    });
+
+    const decodedContent = Buffer.from(response.content || "", "base64").toString("utf8");
+    const parsed = JSON.parse(decodedContent);
+    const catalog = parseLibraryCatalog(parsed);
+
+    saveLibraryCatalog(catalog);
+    return catalog;
+  } catch (error) {
+    console.warn("Unable to load library catalog from GitHub, falling back to local file:", error.message);
+    return null;
+  }
+}
+
+async function syncCatalogToGithub(catalog) {
+  const config = getGithubSyncConfig();
+
+  if (!config) {
+    return { synced: false, reason: "disabled" };
+  }
+
+  const encodedPath = encodeURIComponent(config.filePath).replace(/%2F/g, "/");
+  const getPath = `/repos/${config.repo}/contents/${encodedPath}?ref=${encodeURIComponent(config.branch)}`;
+
+  let currentSha = null;
+  try {
+    const current = await githubApiRequest({
+      method: "GET",
+      requestPath: getPath,
+      token: config.token,
+    });
+    currentSha = current.sha || null;
+  } catch (error) {
+    if (!String(error.message).includes("status 404")) {
+      throw error;
+    }
+  }
+
+  const content = Buffer.from(`${JSON.stringify(catalog, null, 2)}\n`, "utf8").toString("base64");
+  await githubApiRequest({
+    method: "PUT",
+    requestPath: `/repos/${config.repo}/contents/${encodedPath}`,
+    token: config.token,
+    body: {
+      message: `chore(library): sync catalog ${new Date().toISOString()}`,
+      content,
+      ...(currentSha ? { sha: currentSha } : {}),
+      branch: config.branch,
+    },
+  });
+
+  return { synced: true, repo: config.repo, branch: config.branch, filePath: config.filePath };
 }
 
 function normalizeYouTubeUrl(inputUrl) {
@@ -333,7 +473,7 @@ function safeUnlink(filePath) {
 
 async function addTrackFromUrl(inputUrl) {
   const { videoId, canonicalUrl } = normalizeYouTubeUrl(inputUrl);
-  const catalog = loadLibraryCatalog();
+  const catalog = (await fetchCatalogFromGithub()) || loadLibraryCatalog();
 
   const duplicate = catalog.tracks.find(
     (track) => track.canonicalUrl === canonicalUrl && track.status === "ready"
@@ -407,6 +547,15 @@ async function addTrackFromUrl(inputUrl) {
     catalog.tracks.push(record);
     saveLibraryCatalog(catalog);
 
+    try {
+      const syncResult = await syncCatalogToGithub(catalog);
+      if (syncResult.synced) {
+        console.log("Library catalog synced to GitHub:", syncResult);
+      }
+    } catch (error) {
+      console.error("Library catalog GitHub sync failed:", error.message);
+    }
+
     return record;
   } catch (error) {
     const partialFiles = fs
@@ -429,6 +578,8 @@ async function addTrackFromUrl(inputUrl) {
 
 module.exports = {
   addTrackFromUrl,
+  listReadyTracks,
+  fetchCatalogFromGithub,
   normalizeYouTubeUrl,
   AddTrackError,
   LIBRARY_JSON_PATH,

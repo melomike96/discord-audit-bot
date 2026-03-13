@@ -291,3 +291,22 @@ Supported environment variables:
 - `YT_DLP_USER_AGENT`: optional browser user-agent string to send alongside those cookies
 
 The bot uses one shared server-side cookie session for all `!addtrack` requests. Any Discord member can trigger the command, but none of them provide their own browser session. If the cookies expire, an admin needs to refresh them.
+
+### Library commands
+
+- `!addtrack <youtube-url>` adds a YouTube track into `audio/library/library.json`
+- `!library` (or `/library` as a text command) prints a preview of tracks currently marked `ready`
+  - when GitHub sync is configured, the bot first refreshes catalog data from the repo before listing
+
+### Optional GitHub catalog sync
+
+By default, `!addtrack` writes `audio/library/library.json` on the machine where the bot runs.
+
+If you want catalog updates to be written back into your GitHub repo (instead of only on Render's disk), configure:
+
+- `GITHUB_SYNC_TOKEN`: GitHub token with `repo` content write access
+- `GITHUB_SYNC_REPO`: repo in `owner/name` format
+- `GITHUB_SYNC_BRANCH`: branch to update (optional, default `main`)
+- `GITHUB_SYNC_FILE_PATH`: path to catalog file in repo (optional, default `audio/library/library.json`)
+
+When these vars are set, each successful `!addtrack` will also PUT updated catalog content to GitHub.
