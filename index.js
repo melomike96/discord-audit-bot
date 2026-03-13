@@ -18,6 +18,7 @@ const {
   addTrackFromUrl,
   AddTrackError,
   getYtDlpConfigSummary,
+  hydrateLibraryFromGithub,
 } = require("./audio/library/addTrackService");
 const { resolveCommand } = require("./audio/library/resolveCommand");
 
@@ -538,4 +539,22 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
   }
 });
 
-client.login(DISCORD_TOKEN);
+async function bootstrapAndLogin() {
+  try {
+    const hydrationResult = await hydrateLibraryFromGithub();
+    if (hydrationResult.hydrated) {
+      console.log("Library restored from GitHub:", hydrationResult);
+    } else {
+      console.log("Library restore skipped:", hydrationResult);
+    }
+  } catch (error) {
+    console.error("Library restore failed:", error.message);
+  }
+
+  await client.login(DISCORD_TOKEN);
+}
+
+bootstrapAndLogin().catch((error) => {
+  console.error("Bot startup failed:", error);
+  process.exit(1);
+});

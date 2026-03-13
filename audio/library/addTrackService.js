@@ -174,6 +174,15 @@ async function getGithubFileSha({ token, repo, branch, filePath }) {
   }
 }
 
+async function getGithubFileContent({ token, repo, branch, filePath }) {
+  const encodedPath = encodeURIComponent(filePath).replace(/%2F/g, "/");
+  return githubApiRequest({
+    method: "GET",
+    requestPath: `/repos/${repo}/contents/${encodedPath}?ref=${encodeURIComponent(branch)}`,
+    token,
+  });
+}
+
 async function syncCatalogToGithub(catalog) {
   const config = getGithubSyncConfig();
 
@@ -217,6 +226,82 @@ async function syncTrackAudioToGithub(outputPath, outputFileName) {
   });
 
   return { synced: true, repo, branch, filePath };
+}
+
+async function hydrateLibraryFromGithub() {
+  const config = getGithubSyncConfig();
+
+  if (!config) {
+    return { hydrated: false, reason: "disabled" };
+  }
+
+  const { token, repo, branch, catalogPath, libraryDirPath } = config;
+
+  ensureDir(LIBRARY_DIR);
+
+  let remoteCatalog;
+  try {
+    remoteCatalog = await getGithubFileContent({
+      token,
+      repo,
+      branch,
+      filePath: catalogPath,
+    });
+  } catch (error) {
+    if (error.message.includes("status 404")) {
+      return { hydrated: false, reason: "catalog_missing" };
+    }
+
+    throw error;
+  }
+
+  const decodedCatalog = Buffer.from(
+    String(remoteCatalog.content || "").replace(/\s+/g, ""),
+    "base64"
+  ).toString("utf8");
+  const catalog = parseLibraryCatalog(JSON.parse(decodedCatalog));
+  saveLibraryCatalog(catalog);
+
+  let downloadedTracks = 0;
+
+  for (const track of catalog.tracks) {
+    if (track?.status !== "ready" || !track.fileName) {
+      continue;
+    }
+
+    const localPath = path.join(LIBRARY_DIR, track.fileName);
+    if (fs.existsSync(localPath)) {
+      continue;
+    }
+
+    const remotePath = path.posix.join(libraryDirPath, track.fileName);
+
+    try {
+      const remoteAudio = await getGithubFileContent({
+        token,
+        repo,
+        branch,
+        filePath: remotePath,
+      });
+      const audioBuffer = Buffer.from(
+        String(remoteAudio.content || "").replace(/\s+/g, ""),
+        "base64"
+      );
+      fs.writeFileSync(localPath, audioBuffer);
+      downloadedTracks += 1;
+    } catch (error) {
+      console.error(`Library audio restore failed for ${track.fileName}:`, error.message);
+    }
+  }
+
+  return {
+    hydrated: true,
+    repo,
+    branch,
+    catalogPath,
+    downloadedTracks,
+    totalTracks: catalog.tracks.filter((track) => track?.status === "ready" && track?.fileName).length,
+  };
 }
 
 function normalizeYouTubeUrl(inputUrl) {
@@ -628,6 +713,7 @@ module.exports = {
   listReadyTracks,
   normalizeYouTubeUrl,
   AddTrackError,
+  hydrateLibraryFromGithub,
   LIBRARY_JSON_PATH,
   getYtDlpConfigSummary,
 };
