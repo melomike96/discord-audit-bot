@@ -5,7 +5,7 @@ const { spawnSync } = require("child_process");
 function normalizeCandidates(candidates) {
   return candidates
     .filter(Boolean)
-    .map((candidate) => candidate.trim())
+    .map((candidate) => String(candidate).trim())
     .filter(Boolean);
 }
 
@@ -69,8 +69,15 @@ function resolveCommand(commands, options = {}) {
   const envCandidates = normalizeCandidates([
     options.envVar ? process.env[options.envVar] : null,
   ]);
+  const explicitCandidates = normalizeCandidates(options.paths || []).filter((candidate) =>
+    fs.existsSync(candidate)
+  );
 
   for (const candidate of envCandidates) {
+    if (canExecute(candidate)) return candidate;
+  }
+
+  for (const candidate of explicitCandidates) {
     if (canExecute(candidate)) return candidate;
   }
 

@@ -264,18 +264,18 @@ A small but memorable community where:
 ---
 
 This README is meant to guide the project at a high level. Specific implementation details, bot commands, architecture, and deployment notes can be documented separately as the project evolves.
-## Render deployment
+## Deployment
 
-This bot's `!addtrack` command needs `yt-dlp` available inside the Render container. A local Windows `winget` install does not affect Render.
+This bot's `!addtrack` command needs `yt-dlp` available on the host. The repo now handles that during `npm install` by downloading a project-local binary into `.runtime/bin/` when needed.
 
-Use these Render commands:
+Use these commands in your deploy platform:
 
 ```bash
-bash render-build.sh
+npm install
 ```
 
 ```bash
-bash render-start.sh
+node index.js
 ```
 
-The build script downloads the current Linux `yt-dlp` binary into `.render/bin/yt-dlp`. The start script exports `YT_DLP_PATH` so the bot uses that binary at runtime.
+The bot will first try `YT_DLP_PATH`, then a repo-local binary, then the system `PATH`. The older `render-build.sh` and `render-start.sh` wrappers can still be used, but they are no longer required for the default deploy path.

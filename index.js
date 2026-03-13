@@ -22,6 +22,10 @@ const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const GENERAL_CHANNEL_ID = process.env.GENERAL_CHANNEL_ID;
 const PRIVATE_VOICE_CHANNEL_ID = process.env.PRIVATE_VOICE_CHANNEL_ID;
 const LOCK_PATH = path.join(__dirname, ".bot.lock");
+const LOCAL_YT_DLP_CANDIDATES = [
+  path.join(__dirname, ".runtime", "bin", process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp"),
+  path.join(__dirname, ".render", "bin", "yt-dlp"),
+];
 
 console.log("Loaded ENV:");
 console.log("GENERAL_CHANNEL_ID:", GENERAL_CHANNEL_ID || "(not set)");
@@ -81,7 +85,10 @@ function ensureSingleInstance() {
 
 ensureSingleInstance();
 
-if (!resolveCommand(["yt-dlp", "yt_dlp"], { envVar: "YT_DLP_PATH" })) {
+if (!resolveCommand(["yt-dlp", "yt_dlp"], {
+  envVar: "YT_DLP_PATH",
+  paths: LOCAL_YT_DLP_CANDIDATES,
+})) {
   console.warn("WARNING: yt-dlp is not installed. `!addtrack` will not work until it is installed and available on PATH.");
 }
 

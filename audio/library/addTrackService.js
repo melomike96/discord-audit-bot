@@ -7,6 +7,11 @@ const { resolveCommand } = require("./resolveCommand");
 
 const LIBRARY_DIR = __dirname;
 const LIBRARY_JSON_PATH = path.join(LIBRARY_DIR, "library.json");
+const PROJECT_ROOT = path.resolve(LIBRARY_DIR, "..", "..");
+const LOCAL_YT_DLP_CANDIDATES = [
+  path.join(PROJECT_ROOT, ".runtime", "bin", process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp"),
+  path.join(PROJECT_ROOT, ".render", "bin", "yt-dlp"),
+];
 
 class AddTrackError extends Error {
   constructor(message, userMessage, details = null) {
@@ -96,7 +101,10 @@ function normalizeYouTubeUrl(inputUrl) {
 }
 
 function getYtDlpCommand() {
-  const command = resolveCommand(["yt-dlp", "yt_dlp"], { envVar: "YT_DLP_PATH" });
+  const command = resolveCommand(["yt-dlp", "yt_dlp"], {
+    envVar: "YT_DLP_PATH",
+    paths: LOCAL_YT_DLP_CANDIDATES,
+  });
   if (command) return command;
 
   throw new AddTrackError(
