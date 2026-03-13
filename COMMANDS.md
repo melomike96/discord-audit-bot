@@ -101,6 +101,37 @@ How to test:
 3. Type `!track`.
 4. Confirm the displayed title matches the audio track.
 
+### `!addtrack <youtubeLink>`
+
+Source:
+[index.js](/abs/path/C:/Users/mikes/Documents/GitHub/discord-audit-bot/index.js)
+calls `addTrackFromUrl(...)` in
+[audio/library/addTrackService.js](/abs/path/C:/Users/mikes/Documents/GitHub/discord-audit-bot/audio/library/addTrackService.js)
+
+What it does:
+- Validates the YouTube URL.
+- Requires `yt-dlp` to be installed and available on PATH.
+- Requires `ffmpeg` to be installed and available on PATH.
+- Downloads audio from YouTube.
+- Converts the download to `.wav`.
+- Saves the `.wav` into `audio/library`.
+- Writes metadata into `audio/library/library.json`.
+- Replies with either a success message or an error message.
+
+How to test:
+1. Type `!addtrack https://www.youtube.com/watch?v=...`
+2. Confirm the bot first replies that it is processing the track.
+3. Confirm the bot then replies with success or failure.
+4. Confirm a new `.wav` file appears in [audio/library](/abs/path/C:/Users/mikes/Documents/GitHub/discord-audit-bot/audio/library).
+5. Confirm a new track entry appears in [audio/library/library.json](/abs/path/C:/Users/mikes/Documents/GitHub/discord-audit-bot/audio/library/library.json).
+
+Current local prerequisite check:
+- `ffmpeg`: installed
+- `yt-dlp`: missing
+
+Current result:
+- `!addtrack` will not work on this machine until `yt-dlp` is installed.
+
 ### `!help`
 
 Source:
