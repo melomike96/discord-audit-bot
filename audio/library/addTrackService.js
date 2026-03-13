@@ -123,35 +123,97 @@ function githubApiRequest({ method, requestPath, token, body }) {
   });
 }
 
-async function syncCatalogToGithub(catalog) {
+function getGithubSyncConfig() {
   const token = process.env.GITHUB_SYNC_TOKEN;
   const repo = process.env.GITHUB_SYNC_REPO;
   const branch = process.env.GITHUB_SYNC_BRANCH || "main";
   const filePath = process.env.GITHUB_SYNC_FILE_PATH || "audio/library/library.json";
 
   if (!token || !repo) {
+    return null;
+  }
+
+  return {
+    token,
+    repo,
+    branch,
+    catalogPath: filePath,
+    libraryDirPath: path.posix.dirname(filePath),
+  };
+}
+
+async function putGithubFile({ token, repo, branch, filePath, content, sha = undefined }) {
+  await githubApiRequest({
+    method: "PUT",
+    requestPath: `/repos/${repo}/contents/${encodeURIComponent(filePath).replace(/%2F/g, "/")}`,
+    token,
+    body: {
+      message: `chore(library): sync ${filePath} ${new Date().toISOString()}`,
+      content,
+      sha,
+      branch,
+    },
+  });
+}
+
+async function getGithubFileSha({ token, repo, branch, filePath }) {
+  try {
+    const encodedPath = encodeURIComponent(filePath).replace(/%2F/g, "/");
+    const current = await githubApiRequest({
+      method: "GET",
+      requestPath: `/repos/${repo}/contents/${encodedPath}?ref=${encodeURIComponent(branch)}`,
+      token,
+    });
+    return current.sha || null;
+  } catch (error) {
+    if (error.message.includes("status 404")) {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+async function syncCatalogToGithub(catalog) {
+  const config = getGithubSyncConfig();
+
+  if (!config) {
     return { synced: false, reason: "disabled" };
   }
 
-  const encodedPath = encodeURIComponent(filePath).replace(/%2F/g, "/");
-  const getPath = `/repos/${repo}/contents/${encodedPath}?ref=${encodeURIComponent(branch)}`;
-  const current = await githubApiRequest({
-    method: "GET",
-    requestPath: getPath,
+  const { token, repo, branch, catalogPath } = config;
+  const sha = await getGithubFileSha({ token, repo, branch, filePath: catalogPath });
+
+  await putGithubFile({
     token,
+    repo,
+    branch,
+    filePath: catalogPath,
+    content: Buffer.from(`${JSON.stringify(catalog, null, 2)}\n`, "utf8").toString("base64"),
+    sha,
   });
 
-  const content = Buffer.from(`${JSON.stringify(catalog, null, 2)}\n`, "utf8").toString("base64");
-  await githubApiRequest({
-    method: "PUT",
-    requestPath: `/repos/${repo}/contents/${encodedPath}`,
+  return { synced: true, repo, branch, filePath: catalogPath };
+}
+
+async function syncTrackAudioToGithub(outputPath, outputFileName) {
+  const config = getGithubSyncConfig();
+
+  if (!config) {
+    return { synced: false, reason: "disabled" };
+  }
+
+  const { token, repo, branch, libraryDirPath } = config;
+  const filePath = path.posix.join(libraryDirPath, outputFileName);
+  const sha = await getGithubFileSha({ token, repo, branch, filePath });
+
+  await putGithubFile({
     token,
-    body: {
-      message: `chore(library): sync catalog ${new Date().toISOString()}`,
-      content,
-      sha: current.sha,
-      branch,
-    },
+    repo,
+    branch,
+    filePath,
+    content: fs.readFileSync(outputPath).toString("base64"),
+    sha,
   });
 
   return { synced: true, repo, branch, filePath };
@@ -502,9 +564,18 @@ async function addTrackFromUrl(inputUrl) {
     saveLibraryCatalog(catalog);
 
     try {
-      const syncResult = await syncCatalogToGithub(catalog);
-      if (syncResult.synced) {
-        console.log("Library catalog synced to GitHub:", syncResult);
+      const audioSyncResult = await syncTrackAudioToGithub(outputPath, outputFileName);
+      if (audioSyncResult.synced) {
+        console.log("Library audio synced to GitHub:", audioSyncResult);
+      }
+    } catch (error) {
+      console.error("Library audio GitHub sync failed:", error.message);
+    }
+
+    try {
+      const catalogSyncResult = await syncCatalogToGithub(catalog);
+      if (catalogSyncResult.synced) {
+        console.log("Library catalog synced to GitHub:", catalogSyncResult);
       }
     } catch (error) {
       console.error("Library catalog GitHub sync failed:", error.message);

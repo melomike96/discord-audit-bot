@@ -297,15 +297,18 @@ The bot uses one shared server-side cookie session for all `!addtrack` requests.
 - `!addtrack <youtube-url>` adds a YouTube track into `audio/library/library.json`
 - `!library` (or `/library` as a text command) prints a preview of tracks currently marked `ready`
 
-### Optional GitHub catalog sync
+### Optional GitHub library sync
 
 By default, `!addtrack` writes `audio/library/library.json` on the machine where the bot runs.
 
-If you want catalog updates to be written back into your GitHub repo (instead of only on Render's disk), configure:
+If you want added tracks to survive host restarts or redeploys, configure GitHub sync so the bot writes both the catalog and generated `.wav` files back into your repo:
 
 - `GITHUB_SYNC_TOKEN`: GitHub token with `repo` content write access
 - `GITHUB_SYNC_REPO`: repo in `owner/name` format
 - `GITHUB_SYNC_BRANCH`: branch to update (optional, default `main`)
 - `GITHUB_SYNC_FILE_PATH`: path to catalog file in repo (optional, default `audio/library/library.json`)
 
-When these vars are set, each successful `!addtrack` will also PUT updated catalog content to GitHub.
+When these vars are set, each successful `!addtrack` will also PUT:
+
+- `audio/library/library.json`
+- the generated `audio/library/*.wav` file for that track
