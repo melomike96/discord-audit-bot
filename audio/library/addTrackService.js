@@ -96,7 +96,7 @@ function normalizeYouTubeUrl(inputUrl) {
 }
 
 function getYtDlpCommand() {
-  const command = resolveCommand(["yt-dlp", "yt_dlp"]);
+  const command = resolveCommand(["yt-dlp", "yt_dlp"], { envVar: "YT_DLP_PATH" });
   if (command) return command;
 
   throw new AddTrackError(

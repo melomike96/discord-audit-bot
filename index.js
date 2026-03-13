@@ -81,7 +81,7 @@ function ensureSingleInstance() {
 
 ensureSingleInstance();
 
-if (!resolveCommand(["yt-dlp", "yt_dlp"])) {
+if (!resolveCommand(["yt-dlp", "yt_dlp"], { envVar: "YT_DLP_PATH" })) {
   console.warn("WARNING: yt-dlp is not installed. `!addtrack` will not work until it is installed and available on PATH.");
 }
 

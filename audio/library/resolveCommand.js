@@ -2,6 +2,13 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
+function normalizeCandidates(candidates) {
+  return candidates
+    .filter(Boolean)
+    .map((candidate) => candidate.trim())
+    .filter(Boolean);
+}
+
 function canExecute(command) {
   try {
     const result = spawnSync(command, ["--version"], { stdio: "ignore" });
@@ -58,7 +65,15 @@ function getWhereCandidates(command) {
   }
 }
 
-function resolveCommand(commands) {
+function resolveCommand(commands, options = {}) {
+  const envCandidates = normalizeCandidates([
+    options.envVar ? process.env[options.envVar] : null,
+  ]);
+
+  for (const candidate of envCandidates) {
+    if (canExecute(candidate)) return candidate;
+  }
+
   for (const command of commands) {
     if (canExecute(command)) return command;
   }
