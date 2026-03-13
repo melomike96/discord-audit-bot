@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const os = require("os");
 const { spawn } = require("child_process");
 const ffmpegPath = require("ffmpeg-static");
 const { resolveCommand } = require("./resolveCommand");
@@ -12,6 +13,8 @@ const LOCAL_YT_DLP_CANDIDATES = [
   path.join(PROJECT_ROOT, ".runtime", "bin", process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp"),
   path.join(PROJECT_ROOT, ".render", "bin", "yt-dlp"),
 ];
+const RUNTIME_DIR = path.join(PROJECT_ROOT, ".runtime");
+const GENERATED_COOKIES_PATH = path.join(RUNTIME_DIR, "yt-dlp-cookies.txt");
 
 class AddTrackError extends Error {
   constructor(message, userMessage, details = null) {
@@ -113,6 +116,71 @@ function getYtDlpCommand() {
   );
 }
 
+function ensureRuntimeDir() {
+  if (!fs.existsSync(RUNTIME_DIR)) {
+    fs.mkdirSync(RUNTIME_DIR, { recursive: true });
+  }
+}
+
+function resolveCookiesPath() {
+  if (process.env.YT_DLP_COOKIES_PATH) {
+    const configuredPath = path.resolve(PROJECT_ROOT, process.env.YT_DLP_COOKIES_PATH);
+
+    if (!fs.existsSync(configuredPath)) {
+      throw new AddTrackError(
+        "Configured cookies file missing",
+        "The bot's yt-dlp cookies file is missing. Ask an admin to refresh the YouTube cookies."
+      );
+    }
+
+    return configuredPath;
+  }
+
+  if (process.env.YT_DLP_COOKIES_B64) {
+    ensureRuntimeDir();
+
+    try {
+      const normalized = process.env.YT_DLP_COOKIES_B64.replace(/\s+/g, "");
+      const decoded = Buffer.from(normalized, "base64").toString("utf8");
+
+      if (
+        !decoded.startsWith("# HTTP Cookie File") &&
+        !decoded.startsWith("# Netscape HTTP Cookie File")
+      ) {
+        throw new Error("cookies file is not in Netscape format");
+      }
+
+      const newline = os.platform() === "win32" ? "\r\n" : "\n";
+      const normalizedDecoded = decoded.replace(/\r?\n/g, newline);
+      fs.writeFileSync(GENERATED_COOKIES_PATH, normalizedDecoded, "utf8");
+      return GENERATED_COOKIES_PATH;
+    } catch (error) {
+      throw new AddTrackError(
+        "Invalid YT_DLP_COOKIES_B64",
+        "The bot's yt-dlp cookies are invalid. Ask an admin to refresh the YouTube cookies.",
+        error.message
+      );
+    }
+  }
+
+  return null;
+}
+
+function buildYtDlpArgs(baseArgs) {
+  const args = [];
+  const cookiesPath = resolveCookiesPath();
+
+  if (cookiesPath) {
+    args.push("--cookies", cookiesPath);
+  }
+
+  if (process.env.YT_DLP_USER_AGENT) {
+    args.push("--user-agent", process.env.YT_DLP_USER_AGENT);
+  }
+
+  return [...args, ...baseArgs];
+}
+
 function runCommand(command, args) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
@@ -162,11 +230,11 @@ function createDeterministicBaseName(title, videoId) {
 
 async function fetchVideoMetadata(ytDlpCommand, canonicalUrl) {
   try {
-    const { stdout } = await runCommand(ytDlpCommand, [
+    const { stdout } = await runCommand(ytDlpCommand, buildYtDlpArgs([
       "--dump-single-json",
       "--no-playlist",
       canonicalUrl,
-    ]);
+    ]));
 
     const metadata = JSON.parse(stdout);
     return {
@@ -225,14 +293,14 @@ async function addTrackFromUrl(inputUrl) {
   const outputPath = path.join(LIBRARY_DIR, outputFileName);
 
   try {
-    await runCommand(ytDlpCommand, [
+    await runCommand(ytDlpCommand, buildYtDlpArgs([
       "--no-playlist",
       "-f",
       "bestaudio/best",
       "-o",
       `${tempDownloadPath}.%(ext)s`,
       canonicalUrl,
-    ]);
+    ]));
 
     const downloadedFile = fs
       .readdirSync(LIBRARY_DIR)

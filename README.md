@@ -279,3 +279,15 @@ node index.js
 ```
 
 The bot will first try `YT_DLP_PATH`, then a repo-local binary, then the system `PATH`. The older `render-build.sh` and `render-start.sh` wrappers can still be used, but they are no longer required for the default deploy path.
+
+### Optional YouTube cookies
+
+If YouTube blocks `!addtrack` with a sign-in or bot-check error, configure yt-dlp cookies for the bot process.
+
+Supported environment variables:
+
+- `YT_DLP_COOKIES_PATH`: path to a Netscape-format `cookies.txt` file available on the server
+- `YT_DLP_COOKIES_B64`: base64-encoded Netscape-format `cookies.txt` contents
+- `YT_DLP_USER_AGENT`: optional browser user-agent string to send alongside those cookies
+
+The bot uses one shared server-side cookie session for all `!addtrack` requests. Any Discord member can trigger the command, but none of them provide their own browser session. If the cookies expire, an admin needs to refresh them.
