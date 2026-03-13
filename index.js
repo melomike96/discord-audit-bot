@@ -4,13 +4,20 @@ console.log("===== BOT STARTING =====");
 
 const fs = require("fs");
 const path = require("path");
-const { Client, GatewayIntentBits } = require("discord.js");
+const {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  Client,
+  EmbedBuilder,
+  GatewayIntentBits,
+  StringSelectMenuBuilder,
+} = require("discord.js");
 
 const {
   addTrackFromUrl,
   AddTrackError,
   getYtDlpConfigSummary,
-  listReadyTracks,
 } = require("./audio/library/addTrackService");
 const { resolveCommand } = require("./audio/library/resolveCommand");
 
@@ -19,14 +26,15 @@ const {
   stopLoungeSession,
   skipCurrentTrack,
   getCurrentTrack,
+  getLibraryTracks,
   hasActiveSession,
+  requestTrackPlayback,
 } = require("./radio");
-const { addTrackFromYoutube } = require("./youtubeService");
-
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const GENERAL_CHANNEL_ID = process.env.GENERAL_CHANNEL_ID;
 const PRIVATE_VOICE_CHANNEL_ID = process.env.PRIVATE_VOICE_CHANNEL_ID;
 const LOCK_PATH = path.join(__dirname, ".bot.lock");
+const LIBRARY_PAGE_SIZE = 10;
 const LOCAL_YT_DLP_CANDIDATES = [
   path.join(__dirname, ".runtime", "bin", process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp"),
   path.join(__dirname, ".render", "bin", "yt-dlp"),
@@ -178,6 +186,86 @@ function isYoutubeUrl(value) {
   }
 }
 
+function clampLibraryPage(page, totalTracks) {
+  const totalPages = Math.max(1, Math.ceil(totalTracks / LIBRARY_PAGE_SIZE));
+  return Math.min(Math.max(page, 0), totalPages - 1);
+}
+
+function truncateForOption(value, maxLength = 100) {
+  if (value.length <= maxLength) {
+    return value;
+  }
+
+  return `${value.slice(0, maxLength - 3)}...`;
+}
+
+function buildLibraryMessage(page = 0) {
+  const tracks = getLibraryTracks();
+  const safePage = clampLibraryPage(page, tracks.length);
+  const start = safePage * LIBRARY_PAGE_SIZE;
+  const visibleTracks = tracks.slice(start, start + LIBRARY_PAGE_SIZE);
+  const currentTrack = getCurrentTrack();
+  const totalPages = Math.max(1, Math.ceil(tracks.length / LIBRARY_PAGE_SIZE));
+
+  const embed = new EmbedBuilder()
+    .setTitle(`Lounge Library (${tracks.length})`)
+    .setDescription(
+      visibleTracks.length
+        ? visibleTracks
+            .map((track, index) => {
+              const absoluteIndex = start + index + 1;
+              const marker = currentTrack?.fileName === track.fileName ? " [playing]" : "";
+              return `${absoluteIndex}. ${track.name}${marker}`;
+            })
+            .join("\n")
+        : "Library is currently empty."
+    )
+    .setFooter({ text: `Page ${safePage + 1} of ${totalPages}` });
+
+  const components = [];
+
+  if (visibleTracks.length) {
+    components.push(
+      new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId(`library:select:${safePage}`)
+          .setPlaceholder("Choose a track to play next")
+          .addOptions(
+            visibleTracks.map((track) => ({
+              label: truncateForOption(track.name),
+              value: track.fileName,
+              description: truncateForOption(track.fileName, 100),
+            }))
+          )
+      )
+    );
+  }
+
+  components.push(
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`library:page:${safePage - 1}`)
+        .setLabel("Previous")
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(safePage === 0),
+      new ButtonBuilder()
+        .setCustomId(`library:page:${safePage + 1}`)
+        .setLabel("Next")
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(safePage >= totalPages - 1),
+      new ButtonBuilder()
+        .setCustomId(`library:refresh:${safePage}`)
+        .setLabel("Refresh")
+        .setStyle(ButtonStyle.Primary)
+    )
+  );
+
+  return {
+    embeds: [embed],
+    components,
+  };
+}
+
 client.on("messageCreate", async (message) => {
   try {
     if (message.author.bot || !message.guild) return;
@@ -240,20 +328,8 @@ client.on("messageCreate", async (message) => {
     }
 
     if (content === "!library" || content === "/library") {
-      const tracks = listReadyTracks();
-
-      if (!tracks.length) {
-        await message.reply("Library is currently empty.");
-        return;
-      }
-
-      const preview = tracks
-        .slice(0, 25)
-        .map((track, index) => `${index + 1}. ${track.title || track.fileName}`)
-        .join("\n");
-
-      const remainder = tracks.length > 25 ? `\n...and ${tracks.length - 25} more.` : "";
-      await message.reply(`**Lounge Library (${tracks.length})**\n${preview}${remainder}`);
+      console.log(`!library received from ${message.author.username}`);
+      await message.reply(buildLibraryMessage(0));
       return;
     }
 
@@ -314,6 +390,75 @@ client.on("messageCreate", async (message) => {
     }
   } catch (err) {
     console.error("messageCreate handler failed:", err);
+  }
+});
+
+client.on("interactionCreate", async (interaction) => {
+  try {
+    if (!interaction.isStringSelectMenu() && !interaction.isButton()) {
+      return;
+    }
+
+    if (!interaction.customId.startsWith("library:")) {
+      return;
+    }
+
+    if (interaction.isButton()) {
+      const [, action, rawPage] = interaction.customId.split(":");
+      const page = Number.parseInt(rawPage, 10) || 0;
+
+      if (action === "page" || action === "refresh") {
+        await interaction.update(buildLibraryMessage(page));
+      }
+
+      return;
+    }
+
+    const requestedFileName = interaction.values[0];
+    const result = requestTrackPlayback(requestedFileName);
+
+    if (!result.ok) {
+      const failureMessage =
+        result.reason === "inactive_session"
+          ? "Start the radio first, then pick a track from the library."
+          : "That track could not be queued right now.";
+
+      await interaction.reply({
+        content: failureMessage,
+        ephemeral: true,
+      });
+      return;
+    }
+
+    console.log(
+      "library track selected:",
+      JSON.stringify({
+        requestedBy: interaction.user.username,
+        title: result.track.name,
+        fileName: result.track.fileName,
+        interrupted: result.interrupted,
+      })
+    );
+
+    await interaction.reply({
+      content: result.interrupted
+        ? `Queued **${result.track.name}** to play now.`
+        : `Queued **${result.track.name}** to play next.`,
+      ephemeral: true,
+    });
+
+    if (interaction.message?.editable) {
+      await interaction.message.edit(buildLibraryMessage(0)).catch(() => {});
+    }
+  } catch (error) {
+    console.error("interactionCreate handler failed:", error);
+
+    if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
+      await interaction.reply({
+        content: "That library action failed.",
+        ephemeral: true,
+      }).catch(() => {});
+    }
   }
 });
 

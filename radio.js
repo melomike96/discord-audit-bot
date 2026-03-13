@@ -14,6 +14,7 @@ const state = {
   player: null,
   currentTrack: null,
   currentAudioLabel: null,
+  manualNextTrack: null,
   isPlaying: false,
   stopRequested: false,
   skipRequested: false,
@@ -113,6 +114,16 @@ function getRandomLibraryTrackNoRepeat() {
   return selected;
 }
 
+function getNextTrack() {
+  if (state.manualNextTrack) {
+    const requestedTrack = state.manualNextTrack;
+    state.manualNextTrack = null;
+    return requestedTrack;
+  }
+
+  return getRandomLibraryTrackNoRepeat();
+}
+
 async function playFile(filePath) {
   if (!state.connection || !state.player) {
     throw new Error("No active voice connection/player");
@@ -188,7 +199,7 @@ async function startLoungeSession({ guild, voiceChannel, introPath = null }) {
         }
       }
 
-      const track = getRandomLibraryTrackNoRepeat();
+      const track = getNextTrack();
       if (!track) {
         console.log("No library tracks found. Stopping session.");
         break;
@@ -252,6 +263,32 @@ function hasActiveSession() {
   return state.isPlaying;
 }
 
+function requestTrackPlayback(fileName) {
+  const track = getLibraryTracks().find((entry) => entry.fileName === fileName);
+
+  if (!track) {
+    return { ok: false, reason: "not_found" };
+  }
+
+  if (!state.isPlaying || !state.player) {
+    return { ok: false, reason: "inactive_session", track };
+  }
+
+  state.manualNextTrack = track;
+  console.log("Manual track requested:", track.name);
+
+  if (state.currentAudioLabel) {
+    try {
+      state.player.stop(true);
+      return { ok: true, track, interrupted: true };
+    } catch {
+      return { ok: false, reason: "stop_failed", track };
+    }
+  }
+
+  return { ok: true, track, interrupted: false };
+}
+
 function cleanupSession() {
   if (state.connection) {
     try {
@@ -263,6 +300,7 @@ function cleanupSession() {
   state.player = null;
   state.currentTrack = null;
   state.currentAudioLabel = null;
+  state.manualNextTrack = null;
   state.isPlaying = false;
   state.stopRequested = false;
   state.skipRequested = false;
@@ -278,5 +316,7 @@ module.exports = {
   skipCurrentTrack,
   getCurrentTrack,
   hasActiveSession,
+  getLibraryTracks,
+  requestTrackPlayback,
   state,
 };
