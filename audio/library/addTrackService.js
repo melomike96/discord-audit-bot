@@ -1,8 +1,9 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const { spawn, spawnSync } = require("child_process");
+const { spawn } = require("child_process");
 const ffmpegPath = require("ffmpeg-static");
+const { resolveCommand } = require("./resolveCommand");
 
 const LIBRARY_DIR = __dirname;
 const LIBRARY_JSON_PATH = path.join(LIBRARY_DIR, "library.json");
@@ -95,12 +96,8 @@ function normalizeYouTubeUrl(inputUrl) {
 }
 
 function getYtDlpCommand() {
-  const candidates = ["yt-dlp", "yt_dlp"];
-
-  for (const candidate of candidates) {
-    const check = spawnSync(candidate, ["--version"], { stdio: "ignore" });
-    if (check.status === 0) return candidate;
-  }
+  const command = resolveCommand(["yt-dlp", "yt_dlp"]);
+  if (command) return command;
 
   throw new AddTrackError(
     "yt-dlp binary not found",

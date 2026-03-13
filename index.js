@@ -5,9 +5,9 @@ console.log("===== BOT STARTING =====");
 const fs = require("fs");
 const path = require("path");
 const { Client, GatewayIntentBits } = require("discord.js");
-const { spawnSync } = require("child_process");
 
 const { addTrackFromUrl, AddTrackError } = require("./audio/library/addTrackService");
+const { resolveCommand } = require("./audio/library/resolveCommand");
 
 const {
   startLoungeSession,
@@ -26,15 +26,6 @@ const LOCK_PATH = path.join(__dirname, ".bot.lock");
 console.log("Loaded ENV:");
 console.log("GENERAL_CHANNEL_ID:", GENERAL_CHANNEL_ID || "(not set)");
 console.log("PRIVATE_VOICE_CHANNEL_ID:", PRIVATE_VOICE_CHANNEL_ID || "(not set)");
-
-function commandExists(command) {
-  try {
-    const result = spawnSync(command, ["--version"], { stdio: "ignore" });
-    return result.status === 0;
-  } catch {
-    return false;
-  }
-}
 
 function isProcessRunning(pid) {
   try {
@@ -90,7 +81,7 @@ function ensureSingleInstance() {
 
 ensureSingleInstance();
 
-if (!commandExists("yt-dlp") && !commandExists("yt_dlp")) {
+if (!resolveCommand(["yt-dlp", "yt_dlp"])) {
   console.warn("WARNING: yt-dlp is not installed. `!addtrack` will not work until it is installed and available on PATH.");
 }
 
