@@ -11,7 +11,6 @@ const {
   AddTrackError,
   getYtDlpConfigSummary,
   listReadyTracks,
-  fetchCatalogFromGithub,
 } = require("./audio/library/addTrackService");
 const { resolveCommand } = require("./audio/library/resolveCommand");
 
@@ -241,7 +240,6 @@ client.on("messageCreate", async (message) => {
     }
 
     if (content === "!library" || content === "/library") {
-      await fetchCatalogFromGithub();
       const tracks = listReadyTracks();
 
       if (!tracks.length) {

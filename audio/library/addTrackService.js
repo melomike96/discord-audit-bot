@@ -190,17 +190,17 @@ async function syncCatalogToGithub(catalog) {
   const content = Buffer.from(`${JSON.stringify(catalog, null, 2)}\n`, "utf8").toString("base64");
   await githubApiRequest({
     method: "PUT",
-    requestPath: `/repos/${config.repo}/contents/${encodedPath}`,
-    token: config.token,
+    requestPath: `/repos/${repo}/contents/${encodedPath}`,
+    token,
     body: {
       message: `chore(library): sync catalog ${new Date().toISOString()}`,
       content,
-      ...(currentSha ? { sha: currentSha } : {}),
-      branch: config.branch,
+      sha: current.sha,
+      branch,
     },
   });
 
-  return { synced: true, repo: config.repo, branch: config.branch, filePath: config.filePath };
+  return { synced: true, repo, branch, filePath };
 }
 
 function normalizeYouTubeUrl(inputUrl) {
@@ -579,7 +579,6 @@ async function addTrackFromUrl(inputUrl) {
 module.exports = {
   addTrackFromUrl,
   listReadyTracks,
-  fetchCatalogFromGithub,
   normalizeYouTubeUrl,
   AddTrackError,
   LIBRARY_JSON_PATH,
