@@ -10,6 +10,7 @@ const {
   addTrackFromUrl,
   AddTrackError,
   getYtDlpConfigSummary,
+  listReadyTracks,
 } = require("./audio/library/addTrackService");
 const { resolveCommand } = require("./audio/library/resolveCommand");
 
@@ -238,6 +239,24 @@ client.on("messageCreate", async (message) => {
       return;
     }
 
+    if (content === "!library" || content === "/library") {
+      const tracks = listReadyTracks();
+
+      if (!tracks.length) {
+        await message.reply("Library is currently empty.");
+        return;
+      }
+
+      const preview = tracks
+        .slice(0, 25)
+        .map((track, index) => `${index + 1}. ${track.title || track.fileName}`)
+        .join("\n");
+
+      const remainder = tracks.length > 25 ? `\n...and ${tracks.length - 25} more.` : "";
+      await message.reply(`**Lounge Library (${tracks.length})**\n${preview}${remainder}`);
+      return;
+    }
+
     if (/^!addtrack\b/i.test(content) && !parseAddTrackCommand(content)) {
       await message.reply("Please provide a YouTube link. Example: `!addtrack https://www.youtube.com/watch?v=dQw4w9WgXcQ`");
       return;
@@ -288,6 +307,7 @@ client.on("messageCreate", async (message) => {
           "`!stop` - stop radio",
           "`!skip` - skip current track",
           "`!track` - show current track",
+          "`!library` or `/library` - show tracks in the library",
           "`!addtrack <youtubeLink>` - submit a YouTube track",
         ].join("\n")
       );
