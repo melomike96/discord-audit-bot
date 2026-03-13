@@ -256,6 +256,16 @@ client.on("messageCreate", async (message) => {
 
       try {
         const added = await addTrackFromUrl(addTrackUrl);
+        console.log(
+          "addTrack succeeded:",
+          JSON.stringify({
+            requestedBy: message.author.username,
+            title: added.title,
+            uploader: added.uploader || null,
+            videoId: added.id,
+            fileName: added.fileName,
+          })
+        );
         await message.reply(`✅ Added **${added.title}** to the lounge library.`);
       } catch (error) {
         if (error instanceof AddTrackError) {

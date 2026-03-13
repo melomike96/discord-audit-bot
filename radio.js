@@ -118,8 +118,9 @@ async function playFile(filePath) {
     throw new Error("No active voice connection/player");
   }
 
+  const player = state.player;
   const resource = createAudioResource(filePath);
-  state.player.play(resource);
+  player.play(resource);
 
   return new Promise((resolve, reject) => {
     const onIdle = () => {
@@ -133,12 +134,12 @@ async function playFile(filePath) {
     };
 
     function cleanupListeners() {
-      state.player.off(AudioPlayerStatus.Idle, onIdle);
-      state.player.off("error", onError);
+      player.off(AudioPlayerStatus.Idle, onIdle);
+      player.off("error", onError);
     }
 
-    state.player.once(AudioPlayerStatus.Idle, onIdle);
-    state.player.once("error", onError);
+    player.once(AudioPlayerStatus.Idle, onIdle);
+    player.once("error", onError);
   });
 }
 
@@ -181,6 +182,10 @@ async function startLoungeSession({ guild, voiceChannel, introPath = null }) {
         }
         state.currentAudioLabel = null;
         introPath = null;
+
+        if (state.stopRequested) {
+          break;
+        }
       }
 
       const track = getRandomLibraryTrackNoRepeat();
@@ -221,8 +226,6 @@ function stopLoungeSession() {
       state.player.stop(true);
     } catch {}
   }
-
-  cleanupSession();
 }
 
 function skipCurrentTrack() {
