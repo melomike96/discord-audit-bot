@@ -471,6 +471,22 @@ function safeUnlink(filePath) {
   }
 }
 
+function trackHasLocalAudioFile(track) {
+  if (!track || track.status !== "ready") {
+    return false;
+  }
+
+  if (track.filePath && fs.existsSync(track.filePath)) {
+    return true;
+  }
+
+  if (track.fileName) {
+    return fs.existsSync(path.join(LIBRARY_DIR, track.fileName));
+  }
+
+  return false;
+}
+
 async function addTrackFromUrl(inputUrl) {
   const { videoId, canonicalUrl } = normalizeYouTubeUrl(inputUrl);
   const catalog = (await fetchCatalogFromGithub()) || loadLibraryCatalog();
@@ -480,9 +496,15 @@ async function addTrackFromUrl(inputUrl) {
   );
 
   if (duplicate) {
-    throw new AddTrackError(
-      "Duplicate track",
-      `This track is already in the library as **${duplicate.title || duplicate.name || duplicate.fileName}**.`
+    if (trackHasLocalAudioFile(duplicate)) {
+      throw new AddTrackError(
+        "Duplicate track",
+        `This track is already in the library as **${duplicate.title || duplicate.name || duplicate.fileName}**.`
+      );
+    }
+
+    catalog.tracks = catalog.tracks.filter(
+      (track) => !(track.canonicalUrl === canonicalUrl && track.status === "ready")
     );
   }
 
