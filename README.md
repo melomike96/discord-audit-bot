@@ -296,6 +296,7 @@ The bot uses one shared server-side cookie session for all `!addtrack` requests.
 
 - `!addtrack <youtube-url>` adds a YouTube track into `audio/library/library.json`
 - `!library` (or `/library` as a text command) prints a preview of tracks currently marked `ready`
+  - when GitHub sync is configured, the bot first refreshes catalog data from the repo before listing
 
 ### Optional GitHub library sync
 
