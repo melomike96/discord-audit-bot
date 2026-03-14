@@ -102,16 +102,64 @@
       "addedAt": "2026-03-14T14:43:32.996Z"
     },
     {
+      "id": "uxJDkVgSBaY",
+      "title": "De La Soul - Breakadawn (Official Audio)",
+      "canonicalUrl": "https://www.youtube.com/watch?v=uxJDkVgSBaY",
+      "sourceUrl": "https://www.youtube.com/watch?v=uxJDkVgSBaY",
+      "uploader": "WeAreDeLaSoul",
+      "durationSeconds": 255,
+      "fileName": "de-la-soul-breakadawn-official-audio-c4a01ef6.mp3",
+      "filePath": "/opt/render/project/src/audio/library/de-la-soul-breakadawn-official-audio-c4a01ef6.mp3",
+      "status": "ready",
+      "addedAt": "2026-03-14T22:29:11.588Z"
+    },
+    {
       "id": "b5-XhnhG0MA",
       "title": "De La Soul - Itzsoweezee (HOT) (Official Music Video) [HD]",
       "canonicalUrl": "https://www.youtube.com/watch?v=b5-XhnhG0MA",
       "sourceUrl": "https://www.youtube.com/watch?v=b5-XhnhG0MA",
       "uploader": "WeAreDeLaSoul",
       "durationSeconds": 221,
-      "fileName": "de-la-soul-itzsoweezee-hot-official-music-video-hd-0425e14d.wav",
-      "filePath": "/opt/render/project/src/audio/library/de-la-soul-itzsoweezee-hot-official-music-video-hd-0425e14d.wav",
+      "fileName": "de-la-soul-itzsoweezee-hot-official-music-video-hd-0425e14d.mp3",
+      "filePath": "/opt/render/project/src/audio/library/de-la-soul-itzsoweezee-hot-official-music-video-hd-0425e14d.mp3",
       "status": "ready",
-      "addedAt": "2026-03-14T14:52:19.458Z"
+      "addedAt": "2026-03-14T22:30:47.957Z"
+    },
+    {
+      "id": "wqVsfGQ_1SU",
+      "title": "The Pharcyde - Drop (Official HD Music Video)",
+      "canonicalUrl": "https://www.youtube.com/watch?v=wqVsfGQ_1SU",
+      "sourceUrl": "https://www.youtube.com/watch?v=wqVsfGQ_1SU",
+      "uploader": "PHARCYDE TV",
+      "durationSeconds": 212,
+      "fileName": "the-pharcyde-drop-official-hd-music-video-c0f77355.mp3",
+      "filePath": "/opt/render/project/src/audio/library/the-pharcyde-drop-official-hd-music-video-c0f77355.mp3",
+      "status": "ready",
+      "addedAt": "2026-03-14T22:37:44.961Z"
+    },
+    {
+      "id": "jQ-RrGCSa2M",
+      "title": "The Pharcyde - Runnin' (Official HD Music Video)",
+      "canonicalUrl": "https://www.youtube.com/watch?v=jQ-RrGCSa2M",
+      "sourceUrl": "https://www.youtube.com/watch?v=jQ-RrGCSa2M",
+      "uploader": "PHARCYDE TV",
+      "durationSeconds": 264,
+      "fileName": "the-pharcyde-runnin-official-hd-music-video-2c2c80b8.mp3",
+      "filePath": "/opt/render/project/src/audio/library/the-pharcyde-runnin-official-hd-music-video-2c2c80b8.mp3",
+      "status": "ready",
+      "addedAt": "2026-03-14T22:38:44.093Z"
+    },
+    {
+      "id": "CwQSq5iZdpQ",
+      "title": "Smif-N-Wessun - Bucktown (Original Video)",
+      "canonicalUrl": "https://www.youtube.com/watch?v=CwQSq5iZdpQ",
+      "sourceUrl": "https://www.youtube.com/watch?v=CwQSq5iZdpQ",
+      "uploader": "NervousRecordsNYC",
+      "durationSeconds": 254,
+      "fileName": "smif-n-wessun-bucktown-original-video-09328dc4.mp3",
+      "filePath": "/opt/render/project/src/audio/library/smif-n-wessun-bucktown-original-video-09328dc4.mp3",
+      "status": "ready",
+      "addedAt": "2026-03-14T22:43:04.776Z"
     }
   ]
 }
