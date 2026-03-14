@@ -136,6 +136,18 @@
       "filePath": "/opt/render/project/src/audio/library/the-pharcyde-drop-official-hd-music-video-c0f77355.mp3",
       "status": "ready",
       "addedAt": "2026-03-14T22:37:44.961Z"
+    },
+    {
+      "id": "jQ-RrGCSa2M",
+      "title": "The Pharcyde - Runnin' (Official HD Music Video)",
+      "canonicalUrl": "https://www.youtube.com/watch?v=jQ-RrGCSa2M",
+      "sourceUrl": "https://www.youtube.com/watch?v=jQ-RrGCSa2M",
+      "uploader": "PHARCYDE TV",
+      "durationSeconds": 264,
+      "fileName": "the-pharcyde-runnin-official-hd-music-video-2c2c80b8.mp3",
+      "filePath": "/opt/render/project/src/audio/library/the-pharcyde-runnin-official-hd-music-video-2c2c80b8.mp3",
+      "status": "ready",
+      "addedAt": "2026-03-14T22:38:44.093Z"
     }
   ]
 }
