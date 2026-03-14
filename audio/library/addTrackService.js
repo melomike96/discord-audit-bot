@@ -670,25 +670,36 @@ async function addTrackFromUrl(inputUrl) {
     catalog.tracks.push(record);
     saveLibraryCatalog(catalog);
 
+    let audioSyncResult = { synced: false, reason: "disabled" };
+    let catalogSyncResult = { synced: false, reason: "disabled" };
+
     try {
-      const audioSyncResult = await syncTrackAudioToGithub(outputPath, outputFileName);
+      audioSyncResult = await syncTrackAudioToGithub(outputPath, outputFileName);
       if (audioSyncResult.synced) {
         console.log("Library audio synced to GitHub:", audioSyncResult);
       }
     } catch (error) {
       console.error("Library audio GitHub sync failed:", error.message);
+      audioSyncResult = { synced: false, reason: "error", details: error.message };
     }
 
     try {
-      const catalogSyncResult = await syncCatalogToGithub(catalog);
+      catalogSyncResult = await syncCatalogToGithub(catalog);
       if (catalogSyncResult.synced) {
         console.log("Library catalog synced to GitHub:", catalogSyncResult);
       }
     } catch (error) {
       console.error("Library catalog GitHub sync failed:", error.message);
+      catalogSyncResult = { synced: false, reason: "error", details: error.message };
     }
 
-    return record;
+    return {
+      ...record,
+      sync: {
+        audio: audioSyncResult,
+        catalog: catalogSyncResult,
+      },
+    };
   } catch (error) {
     const partialFiles = fs
       .readdirSync(LIBRARY_DIR)

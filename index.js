@@ -33,6 +33,7 @@ const {
 } = require("./radio");
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const GENERAL_CHANNEL_ID = process.env.GENERAL_CHANNEL_ID;
+const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID;
 const PRIVATE_VOICE_CHANNEL_ID = process.env.PRIVATE_VOICE_CHANNEL_ID;
 const LOCK_PATH = path.join(__dirname, ".bot.lock");
 const LIBRARY_PAGE_SIZE = 10;
@@ -43,6 +44,7 @@ const LOCAL_YT_DLP_CANDIDATES = [
 
 console.log("Loaded ENV:");
 console.log("GENERAL_CHANNEL_ID:", GENERAL_CHANNEL_ID || "(not set)");
+console.log("LOG_CHANNEL_ID:", LOG_CHANNEL_ID || "(not set)");
 console.log("PRIVATE_VOICE_CHANNEL_ID:", PRIVATE_VOICE_CHANNEL_ID || "(not set)");
 
 function isProcessRunning(pid) {
@@ -184,6 +186,36 @@ function isYoutubeUrl(value) {
     );
   } catch {
     return false;
+  }
+}
+
+async function sendToLog(guild, content) {
+  try {
+    if (!LOG_CHANNEL_ID) {
+      console.log("LOG_CHANNEL_ID missing, skipping log channel message.");
+      return;
+    }
+
+    const channel = await guild.channels.fetch(LOG_CHANNEL_ID).catch(() => null);
+
+    if (!channel) {
+      console.log("Log channel not found.");
+      return;
+    }
+
+    if (!channel.isTextBased()) {
+      console.log("LOG_CHANNEL_ID is not a text channel.");
+      return;
+    }
+
+    await channel.send({
+      content,
+      allowedMentions: { parse: [] },
+    });
+
+    console.log("Message sent to log channel.");
+  } catch (err) {
+    console.error("sendToLog failed:", err);
   }
 }
 
@@ -361,6 +393,16 @@ client.on("messageCreate", async (message) => {
             videoId: added.id,
             fileName: added.fileName,
           })
+        );
+        await sendToLog(
+          message.guild,
+          [
+            "**Track Added**",
+            `Requested by: ${message.author.username}`,
+            `Title: ${added.title}`,
+            `Audio sync: ${added.sync?.audio?.synced ? "ok" : `failed (${added.sync?.audio?.reason || "unknown"})`}`,
+            `Catalog sync: ${added.sync?.catalog?.synced ? "ok" : `failed (${added.sync?.catalog?.reason || "unknown"})`}`,
+          ].join("\n")
         );
         await message.reply(`✅ Added **${added.title}** to the lounge library.`);
       } catch (error) {
