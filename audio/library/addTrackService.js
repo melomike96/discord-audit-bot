@@ -608,7 +608,10 @@ function trackHasLocalAudioFile(track) {
   return false;
 }
 
-async function addTrackFromUrl(inputUrl) {
+async function addTrackFromUrl(inputUrl, options = {}) {
+  const requestedBy = typeof options.requestedBy === "string" && options.requestedBy.trim()
+    ? options.requestedBy.trim()
+    : null;
   const { videoId, canonicalUrl } = normalizeYouTubeUrl(inputUrl);
   const catalog = loadLibraryCatalog();
 
@@ -687,6 +690,7 @@ async function addTrackFromUrl(inputUrl) {
       durationSeconds: metadata.durationSeconds,
       fileName: outputFileName,
       filePath: outputPath,
+      requestedBy,
       status: "ready",
       addedAt: new Date().toISOString(),
     };

@@ -30,6 +30,7 @@ const {
   getLibraryTracks,
   hasActiveSession,
   requestTrackPlayback,
+  setRadioLifecycleHandlers,
 } = require("./radio");
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const GENERAL_CHANNEL_ID = process.env.GENERAL_CHANNEL_ID;
@@ -38,6 +39,7 @@ const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID;
 const PRIVATE_VOICE_CHANNEL_ID = process.env.PRIVATE_VOICE_CHANNEL_ID;
 const LOCK_PATH = path.join(__dirname, ".bot.lock");
 const LOUNGE_STATUS_PATH = path.join(__dirname, ".lounge-status.json");
+const BOT_METRICS_PATH = path.join(__dirname, ".bot-metrics.json");
 const LIBRARY_PAGE_SIZE = 10;
 const LOCAL_YT_DLP_CANDIDATES = [
   path.join(__dirname, ".runtime", "bin", process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp"),
@@ -169,6 +171,23 @@ client.once("clientReady", () => {
 });
 
 
+setRadioLifecycleHandlers({
+  trackStart: async ({ track, guildId, isManualRequest }) => {
+    try {
+      const guild = client.guilds.cache.get(guildId)
+        || await client.guilds.fetch(guildId).catch(() => null);
+      if (!guild) {
+        return;
+      }
+
+      await sendEmbedToLog(guild, buildNowPlayingEmbed(track, { isManualRequest }));
+      await maybeSendTrackPlayMilestone(guild, track);
+    } catch (error) {
+      console.error("trackStart handler failed:", error);
+    }
+  },
+});
+
 function parseAddTrackCommand(content) {
   const match = content.match(/^!addtrack\s+(.+)$/i);
   if (!match) return null;
@@ -233,6 +252,208 @@ function readLoungeStatusState() {
     console.error("Failed to read lounge status state:", error);
     return {};
   }
+}
+
+function readBotMetrics() {
+  try {
+    if (!fs.existsSync(BOT_METRICS_PATH)) {
+      return {
+        milestones: {
+          libraryTrackCount: 0,
+        },
+        trackPlayCounts: {},
+      };
+    }
+
+    const parsed = JSON.parse(fs.readFileSync(BOT_METRICS_PATH, "utf8"));
+    return {
+      milestones: {
+        libraryTrackCount: Number(parsed?.milestones?.libraryTrackCount) || 0,
+      },
+      trackPlayCounts:
+        parsed?.trackPlayCounts && typeof parsed.trackPlayCounts === "object"
+          ? parsed.trackPlayCounts
+          : {},
+    };
+  } catch (error) {
+    console.error("Failed to read bot metrics:", error);
+    return {
+      milestones: {
+        libraryTrackCount: 0,
+      },
+      trackPlayCounts: {},
+    };
+  }
+}
+
+function writeBotMetrics(metrics) {
+  try {
+    fs.writeFileSync(BOT_METRICS_PATH, `${JSON.stringify(metrics, null, 2)}\n`, "utf8");
+  } catch (error) {
+    console.error("Failed to write bot metrics:", error);
+  }
+}
+
+function getLibraryMilestoneTarget(trackCount) {
+  if (trackCount < 10) return null;
+
+  if (trackCount < 100) {
+    return Math.floor(trackCount / 10) * 10;
+  }
+
+  return Math.floor(trackCount / 25) * 25;
+}
+
+function formatDuration(durationSeconds) {
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+    return "Unknown";
+  }
+
+  const totalSeconds = Math.floor(durationSeconds);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+
+  if (hours > 0) {
+    return `${hours}:${String(remainingMinutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  }
+
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+async function getLogTextChannel(guild) {
+  if (!LOG_CHANNEL_ID) {
+    console.log("LOG_CHANNEL_ID missing, skipping log embed.");
+    return null;
+  }
+
+  const channel = await guild.channels.fetch(LOG_CHANNEL_ID).catch(() => null);
+
+  if (!channel) {
+    console.log("Log channel not found.");
+    return null;
+  }
+
+  if (!channel.isTextBased()) {
+    console.log("LOG_CHANNEL_ID is not a text channel.");
+    return null;
+  }
+
+  return channel;
+}
+
+async function sendEmbedToLog(guild, embed) {
+  try {
+    const channel = await getLogTextChannel(guild);
+    if (!channel) {
+      return;
+    }
+
+    await channel.send({
+      embeds: [embed],
+      allowedMentions: { parse: [] },
+    });
+  } catch (error) {
+    console.error("sendEmbedToLog failed:", error);
+  }
+}
+
+function buildNowPlayingEmbed(track, { isManualRequest = false } = {}) {
+  const accentColor = isManualRequest ? 0xf59e0b : 0x57f287;
+  const embed = new EmbedBuilder()
+    .setTitle(isManualRequest ? "Now Playing: Pick Up Next" : "Now Playing")
+    .setDescription(`**${track.title || track.name}**`)
+    .setColor(accentColor)
+    .addFields(
+      {
+        name: "Artist / Uploader",
+        value: track.uploader || "Unknown",
+        inline: true,
+      },
+      {
+        name: "Duration",
+        value: formatDuration(track.durationSeconds),
+        inline: true,
+      },
+      {
+        name: "Source",
+        value: track.sourceUrl ? `[Open track](${track.sourceUrl})` : "Library file",
+        inline: true,
+      }
+    )
+    .setFooter({
+      text: isManualRequest
+        ? `Queued by lounge interaction${track.requestedBy ? ` • Added by ${track.requestedBy}` : ""}`
+        : track.requestedBy
+          ? `Added by ${track.requestedBy}`
+          : "Spinning from the lounge library",
+    })
+    .setTimestamp(new Date());
+
+  return embed;
+}
+
+function buildMilestoneEmbed({ title, description, color = 0x5865f2, footer = null }) {
+  const embed = new EmbedBuilder()
+    .setTitle(title)
+    .setDescription(description)
+    .setColor(color)
+    .setTimestamp(new Date());
+
+  if (footer) {
+    embed.setFooter({ text: footer });
+  }
+
+  return embed;
+}
+
+async function maybeSendLibraryMilestone(guild, addedTrack) {
+  const trackCount = getLibraryTracks().length;
+  const nextMilestone = getLibraryMilestoneTarget(trackCount);
+  if (!nextMilestone || nextMilestone !== trackCount) {
+    return;
+  }
+
+  const metrics = readBotMetrics();
+  if (metrics.milestones.libraryTrackCount >= nextMilestone) {
+    return;
+  }
+
+  metrics.milestones.libraryTrackCount = nextMilestone;
+  writeBotMetrics(metrics);
+
+  await sendEmbedToLog(
+    guild,
+    buildMilestoneEmbed({
+      title: "Library Milestone",
+      description: `The lounge library just hit **${nextMilestone} tracks**.\nLatest add: **${addedTrack.title}**${addedTrack.uploader ? ` by **${addedTrack.uploader}**` : ""}.`,
+      color: 0x5865f2,
+      footer: addedTrack.requestedBy ? `Requested by ${addedTrack.requestedBy}` : "Fresh pull for the crates",
+    })
+  );
+}
+
+async function maybeSendTrackPlayMilestone(guild, track) {
+  const metrics = readBotMetrics();
+  const key = track.fileName;
+  const currentCount = (Number(metrics.trackPlayCounts[key]) || 0) + 1;
+  metrics.trackPlayCounts[key] = currentCount;
+  writeBotMetrics(metrics);
+
+  if (currentCount < 5 || currentCount % 25 !== 0) {
+    return;
+  }
+
+  await sendEmbedToLog(
+    guild,
+    buildMilestoneEmbed({
+      title: "Track Milestone",
+      description: `**${track.title || track.name}** just spun for the **${currentCount}th** time.`,
+      color: 0xec4899,
+      footer: track.uploader ? `Uploader: ${track.uploader}` : "Certified lounge rotation",
+    })
+  );
 }
 
 function writeLoungeStatusState(state) {
@@ -356,6 +577,33 @@ async function updateLoungeStatusMessage(guild, recentActivity = null) {
     embeds: [embed],
     allowedMentions: { parse: [] },
   });
+}
+
+async function announceLoungePresenceTransition(guild, transition) {
+  if (transition.type === "active") {
+    await sendEmbedToLog(
+      guild,
+      buildMilestoneEmbed({
+        title: "Lounge Active",
+        description: `**${transition.memberName}** just lit up Casual Loungin'.`,
+        color: 0x57f287,
+        footer: transition.headcount === 1 ? "The room is open" : `${transition.headcount} people in the room`,
+      })
+    );
+    return;
+  }
+
+  if (transition.type === "empty") {
+    await sendEmbedToLog(
+      guild,
+      buildMilestoneEmbed({
+        title: "Lounge Empty",
+        description: `**${transition.memberName}** was the last one out of Casual Loungin'.`,
+        color: 0x747f8d,
+        footer: "The room went quiet",
+      })
+    );
+  }
 }
 
 function clampLibraryPage(page, totalTracks) {
@@ -522,7 +770,9 @@ client.on("messageCreate", async (message) => {
       await message.reply("🎧 Got it — processing your YouTube track now...");
 
       try {
-        const added = await addTrackFromUrl(addTrackUrl);
+        const added = await addTrackFromUrl(addTrackUrl, {
+          requestedBy: message.author.username,
+        });
         console.log(
           "addTrack succeeded:",
           JSON.stringify({
@@ -543,6 +793,7 @@ client.on("messageCreate", async (message) => {
             `Catalog sync: ${added.sync?.catalog?.synced ? "ok" : `failed (${added.sync?.catalog?.reason || "unknown"})`}`,
           ].join("\n")
         );
+        await maybeSendLibraryMilestone(message.guild, added);
         await message.reply(`✅ Added **${added.title}** to the lounge library.`);
       } catch (error) {
         if (error instanceof AddTrackError) {
@@ -667,6 +918,11 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
       return;
     }
 
+    const loungeChannel = await newState.guild.channels.fetch(LOUNGE_VOICE_CHANNEL_ID).catch(() => null);
+    const postChangeHeadcount = loungeChannel && "members" in loungeChannel
+      ? [...loungeChannel.members.values()].filter((voiceMember) => !voiceMember.user.bot).length
+      : 0;
+
     if (!oldState.channelId && newState.channelId) {
       const voiceChannel = newState.channel;
       if (!voiceChannel) return;
@@ -676,6 +932,13 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
         newState.guild,
         `${displayName} joined Casual Loungin'`
       );
+      if (joinedLounge && postChangeHeadcount === 1) {
+        await announceLoungePresenceTransition(newState.guild, {
+          type: "active",
+          memberName: displayName,
+          headcount: postChangeHeadcount,
+        });
+      }
       return;
     }
 
@@ -688,6 +951,13 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
         oldState.guild,
         `${displayName} left Casual Loungin'`
       );
+      if (leftLounge && postChangeHeadcount === 0) {
+        await announceLoungePresenceTransition(oldState.guild, {
+          type: "empty",
+          memberName: displayName,
+          headcount: postChangeHeadcount,
+        });
+      }
       return;
     }
 
@@ -705,6 +975,21 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
           : `${displayName} left Casual Loungin'`;
 
       await updateLoungeStatusMessage(newState.guild, activity);
+      if (movedIntoLounge && postChangeHeadcount === 1) {
+        await announceLoungePresenceTransition(newState.guild, {
+          type: "active",
+          memberName: displayName,
+          headcount: postChangeHeadcount,
+        });
+      }
+
+      if (movedOutOfLounge && postChangeHeadcount === 0) {
+        await announceLoungePresenceTransition(newState.guild, {
+          type: "empty",
+          memberName: displayName,
+          headcount: postChangeHeadcount,
+        });
+      }
     }
   } catch (err) {
     console.error("voiceStateUpdate handler failed:", err);

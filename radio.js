@@ -22,6 +22,10 @@ const state = {
   activeGuildId: null,
   recentlyPlayed: [],
 };
+const lifecycleHandlers = {
+  trackStart: null,
+  trackEnd: null,
+};
 
 const TRACK_NAME_MAP = {
   "93til": "Souls of Mischief - 93 'til Infinity",
@@ -73,6 +77,14 @@ function getLibraryTracks() {
               fileName: track.fileName,
               name: track.title || getCleanTrackName(track.fileName),
               fullPath,
+              title: track.title || getCleanTrackName(track.fileName),
+              uploader: track.uploader || null,
+              sourceUrl: track.sourceUrl || track.canonicalUrl || null,
+              canonicalUrl: track.canonicalUrl || null,
+              durationSeconds: track.durationSeconds || null,
+              addedAt: track.addedAt || null,
+              requestedBy: track.requestedBy || null,
+              id: track.id || null,
             };
           })
           .filter((track) => fs.existsSync(track.fullPath));
@@ -89,6 +101,14 @@ function getLibraryTracks() {
       fileName: file,
       name: getCleanTrackName(file),
       fullPath: path.join(libraryDir, file),
+      title: getCleanTrackName(file),
+      uploader: null,
+      sourceUrl: null,
+      canonicalUrl: null,
+      durationSeconds: null,
+      addedAt: null,
+      requestedBy: null,
+      id: null,
     }));
 }
 
@@ -119,10 +139,16 @@ function getNextTrack() {
   if (state.manualNextTrack) {
     const requestedTrack = state.manualNextTrack;
     state.manualNextTrack = null;
-    return requestedTrack;
+    return {
+      track: requestedTrack,
+      isManualRequest: true,
+    };
   }
 
-  return getRandomLibraryTrackNoRepeat();
+  return {
+    track: getRandomLibraryTrackNoRepeat(),
+    isManualRequest: false,
+  };
 }
 
 async function playFile(filePath) {
@@ -200,7 +226,8 @@ async function startLoungeSession({ guild, voiceChannel, introPath = null }) {
         }
       }
 
-      const track = getNextTrack();
+      const selection = getNextTrack();
+      const track = selection.track;
       if (!track) {
         console.log("No library tracks found. Stopping session.");
         break;
@@ -211,11 +238,24 @@ async function startLoungeSession({ guild, voiceChannel, introPath = null }) {
       state.skipRequested = false;
 
       console.log("Random track chosen:", track.name);
+      lifecycleHandlers.trackStart?.({
+        track,
+        guildId: guild.id,
+        channelId: voiceChannel.id,
+        isManualRequest: selection.isManualRequest,
+      });
 
       try {
         await playFile(track.fullPath);
       } catch (err) {
         console.error("Track playback failed:", err);
+      } finally {
+        lifecycleHandlers.trackEnd?.({
+          track,
+          guildId: guild.id,
+          channelId: voiceChannel.id,
+          wasSkipped: state.skipRequested,
+        });
       }
 
       state.currentAudioLabel = null;
@@ -311,6 +351,15 @@ function cleanupSession() {
   console.log("Session cleaned up.");
 }
 
+function setRadioLifecycleHandlers(handlers = {}) {
+  lifecycleHandlers.trackStart = typeof handlers.trackStart === "function"
+    ? handlers.trackStart
+    : null;
+  lifecycleHandlers.trackEnd = typeof handlers.trackEnd === "function"
+    ? handlers.trackEnd
+    : null;
+}
+
 module.exports = {
   startLoungeSession,
   stopLoungeSession,
@@ -319,5 +368,6 @@ module.exports = {
   hasActiveSession,
   getLibraryTracks,
   requestTrackPlayback,
+  setRadioLifecycleHandlers,
   state,
 };
