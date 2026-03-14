@@ -88,6 +88,30 @@
       "filePath": "/opt/render/project/src/audio/library/j-cole-two-six-official-audio-42713a42.wav",
       "status": "ready",
       "addedAt": "2026-03-14T01:49:31.277Z"
+    },
+    {
+      "id": "2WbSBLplJS0",
+      "title": "De La Soul - Breakadawn (Official Music Video) [HD]",
+      "canonicalUrl": "https://www.youtube.com/watch?v=2WbSBLplJS0",
+      "sourceUrl": "https://www.youtube.com/watch?v=2WbSBLplJS0",
+      "uploader": "WeAreDeLaSoul",
+      "durationSeconds": 257,
+      "fileName": "de-la-soul-breakadawn-official-music-video-hd-ef829f05.wav",
+      "filePath": "/opt/render/project/src/audio/library/de-la-soul-breakadawn-official-music-video-hd-ef829f05.wav",
+      "status": "ready",
+      "addedAt": "2026-03-14T14:43:32.996Z"
+    },
+    {
+      "id": "b5-XhnhG0MA",
+      "title": "De La Soul - Itzsoweezee (HOT) (Official Music Video) [HD]",
+      "canonicalUrl": "https://www.youtube.com/watch?v=b5-XhnhG0MA",
+      "sourceUrl": "https://www.youtube.com/watch?v=b5-XhnhG0MA",
+      "uploader": "WeAreDeLaSoul",
+      "durationSeconds": 221,
+      "fileName": "de-la-soul-itzsoweezee-hot-official-music-video-hd-0425e14d.wav",
+      "filePath": "/opt/render/project/src/audio/library/de-la-soul-itzsoweezee-hot-official-music-video-hd-0425e14d.wav",
+      "status": "ready",
+      "addedAt": "2026-03-14T14:52:19.458Z"
     }
   ]
 }
