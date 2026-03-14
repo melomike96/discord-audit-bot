@@ -148,6 +148,18 @@
       "filePath": "/opt/render/project/src/audio/library/the-pharcyde-runnin-official-hd-music-video-2c2c80b8.mp3",
       "status": "ready",
       "addedAt": "2026-03-14T22:38:44.093Z"
+    },
+    {
+      "id": "CwQSq5iZdpQ",
+      "title": "Smif-N-Wessun - Bucktown (Original Video)",
+      "canonicalUrl": "https://www.youtube.com/watch?v=CwQSq5iZdpQ",
+      "sourceUrl": "https://www.youtube.com/watch?v=CwQSq5iZdpQ",
+      "uploader": "NervousRecordsNYC",
+      "durationSeconds": 254,
+      "fileName": "smif-n-wessun-bucktown-original-video-09328dc4.mp3",
+      "filePath": "/opt/render/project/src/audio/library/smif-n-wessun-bucktown-original-video-09328dc4.mp3",
+      "status": "ready",
+      "addedAt": "2026-03-14T22:43:02.106Z"
     }
   ]
 }
