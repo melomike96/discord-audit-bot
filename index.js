@@ -247,6 +247,7 @@ function formatTimestamp(date = new Date()) {
   return date.toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",
+    timeZone: "America/New_York",
   });
 }
 
@@ -292,12 +293,6 @@ async function getOrCreateLoungeStatusMessage(guild) {
     allowedMentions: { parse: [] },
   });
 
-  try {
-    await createdMessage.pin();
-  } catch (error) {
-    console.error("Failed to pin lounge status message:", error);
-  }
-
   writeLoungeStatusState({
     ...state,
     [guild.id]: createdMessage.id,
@@ -325,8 +320,8 @@ async function updateLoungeStatusMessage(guild, recentActivity = null) {
   const statusLines = [
     "**Casual Loungin'**",
     memberNames.length
-      ? `Currently loungin': ${memberNames.join(", ")}`
-      : "Currently loungin': nobody",
+      ? `Currently loungin: ${memberNames.join(", ")}`
+      : "Currently loungin: nobody",
     `Headcount: ${memberNames.length}`,
     `Last update: ${formatTimestamp()}`,
   ];
