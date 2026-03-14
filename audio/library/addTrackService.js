@@ -16,6 +16,8 @@ const LOCAL_YT_DLP_CANDIDATES = [
 ];
 const RUNTIME_DIR = path.join(PROJECT_ROOT, ".runtime");
 const GENERATED_COOKIES_PATH = path.join(RUNTIME_DIR, "yt-dlp-cookies.txt");
+const DEFAULT_OUTPUT_EXTENSION = ".mp3";
+const DEFAULT_GITHUB_SYNC_MAX_FILE_BYTES = 90 * 1024 * 1024;
 
 class AddTrackError extends Error {
   constructor(message, userMessage, details = null) {
@@ -213,6 +215,24 @@ async function syncTrackAudioToGithub(outputPath, outputFileName) {
   }
 
   const { token, repo, branch, libraryDirPath } = config;
+  const fileSizeBytes = fs.statSync(outputPath).size;
+  const maxFileBytes = Number.parseInt(
+    process.env.GITHUB_SYNC_MAX_FILE_BYTES || "",
+    10
+  );
+  const effectiveMaxFileBytes = Number.isFinite(maxFileBytes) && maxFileBytes > 0
+    ? maxFileBytes
+    : DEFAULT_GITHUB_SYNC_MAX_FILE_BYTES;
+
+  if (fileSizeBytes > effectiveMaxFileBytes) {
+    return {
+      synced: false,
+      reason: "file_too_large",
+      fileSizeBytes,
+      maxFileBytes: effectiveMaxFileBytes,
+    };
+  }
+
   const filePath = path.posix.join(libraryDirPath, outputFileName);
   const sha = await getGithubFileSha({ token, repo, branch, filePath });
 
@@ -615,7 +635,7 @@ async function addTrackFromUrl(inputUrl) {
   const baseName = createDeterministicBaseName(metadata.title, videoId);
 
   const tempDownloadPath = path.join(LIBRARY_DIR, `${baseName}.download`);
-  const outputFileName = `${baseName}.wav`;
+  const outputFileName = `${baseName}${DEFAULT_OUTPUT_EXTENSION}`;
   const outputPath = path.join(LIBRARY_DIR, outputFileName);
 
   try {
@@ -649,6 +669,10 @@ async function addTrackFromUrl(inputUrl) {
       "2",
       "-ar",
       "48000",
+      "-codec:a",
+      "libmp3lame",
+      "-b:a",
+      "192k",
       outputPath,
     ]);
 

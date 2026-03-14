@@ -302,7 +302,7 @@ The bot uses one shared server-side cookie session for all `!addtrack` requests.
 
 By default, `!addtrack` writes `audio/library/library.json` on the machine where the bot runs.
 
-If you want added tracks to survive host restarts or redeploys, configure GitHub sync so the bot writes both the catalog and generated `.wav` files back into your repo:
+If you want added tracks to survive host restarts or redeploys, configure GitHub sync so the bot writes both the catalog and generated audio files back into your repo:
 
 - `GITHUB_SYNC_TOKEN`: GitHub token with `repo` content write access
 - `GITHUB_SYNC_REPO`: repo in `owner/name` format
@@ -312,4 +312,6 @@ If you want added tracks to survive host restarts or redeploys, configure GitHub
 When these vars are set, each successful `!addtrack` will also PUT:
 
 - `audio/library/library.json`
-- the generated `audio/library/*.wav` file for that track
+- the generated `audio/library/*.mp3` file for that track
+
+The bot now encodes new `!addtrack` imports as 192 kbps MP3 instead of WAV so GitHub Contents API sync stays within practical file-size limits. Existing `.wav` files in the library still play normally.

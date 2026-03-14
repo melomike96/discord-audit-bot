@@ -35,6 +35,7 @@ const TRACK_NAME_MAP = {
 };
 
 const LIBRARY_JSON_PATH = path.join(__dirname, "audio", "library", "library.json");
+const SUPPORTED_LIBRARY_EXTENSIONS = new Set([".wav", ".mp3", ".m4a", ".aac", ".ogg", ".flac"]);
 
 function getCleanTrackName(fileName) {
   const baseName = path.parse(fileName).name;
@@ -77,13 +78,13 @@ function getLibraryTracks() {
           .filter((track) => fs.existsSync(track.fullPath));
       }
     } catch (error) {
-      console.error("Failed to read library.json; falling back to wav scan:", error.message);
+      console.error("Failed to read library.json; falling back to audio file scan:", error.message);
     }
   }
 
   return fs
     .readdirSync(libraryDir)
-    .filter((file) => file.toLowerCase().endsWith(".wav"))
+    .filter((file) => SUPPORTED_LIBRARY_EXTENSIONS.has(path.extname(file).toLowerCase()))
     .map((file) => ({
       fileName: file,
       name: getCleanTrackName(file),
