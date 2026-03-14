@@ -102,18 +102,6 @@
       "addedAt": "2026-03-14T14:43:32.996Z"
     },
     {
-      "id": "b5-XhnhG0MA",
-      "title": "De La Soul - Itzsoweezee (HOT) (Official Music Video) [HD]",
-      "canonicalUrl": "https://www.youtube.com/watch?v=b5-XhnhG0MA",
-      "sourceUrl": "https://www.youtube.com/watch?v=b5-XhnhG0MA",
-      "uploader": "WeAreDeLaSoul",
-      "durationSeconds": 221,
-      "fileName": "de-la-soul-itzsoweezee-hot-official-music-video-hd-0425e14d.wav",
-      "filePath": "/opt/render/project/src/audio/library/de-la-soul-itzsoweezee-hot-official-music-video-hd-0425e14d.wav",
-      "status": "ready",
-      "addedAt": "2026-03-14T14:52:19.458Z"
-    },
-    {
       "id": "uxJDkVgSBaY",
       "title": "De La Soul - Breakadawn (Official Audio)",
       "canonicalUrl": "https://www.youtube.com/watch?v=uxJDkVgSBaY",
@@ -124,6 +112,18 @@
       "filePath": "/opt/render/project/src/audio/library/de-la-soul-breakadawn-official-audio-c4a01ef6.mp3",
       "status": "ready",
       "addedAt": "2026-03-14T22:29:11.588Z"
+    },
+    {
+      "id": "b5-XhnhG0MA",
+      "title": "De La Soul - Itzsoweezee (HOT) (Official Music Video) [HD]",
+      "canonicalUrl": "https://www.youtube.com/watch?v=b5-XhnhG0MA",
+      "sourceUrl": "https://www.youtube.com/watch?v=b5-XhnhG0MA",
+      "uploader": "WeAreDeLaSoul",
+      "durationSeconds": 221,
+      "fileName": "de-la-soul-itzsoweezee-hot-official-music-video-hd-0425e14d.mp3",
+      "filePath": "/opt/render/project/src/audio/library/de-la-soul-itzsoweezee-hot-official-music-video-hd-0425e14d.mp3",
+      "status": "ready",
+      "addedAt": "2026-03-14T22:30:47.957Z"
     }
   ]
 }
