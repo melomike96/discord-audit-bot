@@ -33,9 +33,11 @@ const {
 } = require("./radio");
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const GENERAL_CHANNEL_ID = process.env.GENERAL_CHANNEL_ID;
+const LOUNGE_VOICE_CHANNEL_ID = process.env.LOUNGE_VOICE_CHANNEL_ID;
 const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID;
 const PRIVATE_VOICE_CHANNEL_ID = process.env.PRIVATE_VOICE_CHANNEL_ID;
 const LOCK_PATH = path.join(__dirname, ".bot.lock");
+const LOUNGE_STATUS_PATH = path.join(__dirname, ".lounge-status.json");
 const LIBRARY_PAGE_SIZE = 10;
 const LOCAL_YT_DLP_CANDIDATES = [
   path.join(__dirname, ".runtime", "bin", process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp"),
@@ -44,6 +46,7 @@ const LOCAL_YT_DLP_CANDIDATES = [
 
 console.log("Loaded ENV:");
 console.log("GENERAL_CHANNEL_ID:", GENERAL_CHANNEL_ID || "(not set)");
+console.log("LOUNGE_VOICE_CHANNEL_ID:", LOUNGE_VOICE_CHANNEL_ID || "(not set)");
 console.log("LOG_CHANNEL_ID:", LOG_CHANNEL_ID || "(not set)");
 console.log("PRIVATE_VOICE_CHANNEL_ID:", PRIVATE_VOICE_CHANNEL_ID || "(not set)");
 
@@ -217,6 +220,130 @@ async function sendToLog(guild, content) {
   } catch (err) {
     console.error("sendToLog failed:", err);
   }
+}
+
+function readLoungeStatusState() {
+  try {
+    if (!fs.existsSync(LOUNGE_STATUS_PATH)) {
+      return {};
+    }
+
+    return JSON.parse(fs.readFileSync(LOUNGE_STATUS_PATH, "utf8"));
+  } catch (error) {
+    console.error("Failed to read lounge status state:", error);
+    return {};
+  }
+}
+
+function writeLoungeStatusState(state) {
+  try {
+    fs.writeFileSync(LOUNGE_STATUS_PATH, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+  } catch (error) {
+    console.error("Failed to write lounge status state:", error);
+  }
+}
+
+function formatTimestamp(date = new Date()) {
+  return date.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+async function getGeneralTextChannel(guild) {
+  if (!GENERAL_CHANNEL_ID) {
+    console.log("GENERAL_CHANNEL_ID missing, skipping lounge status update.");
+    return null;
+  }
+
+  const channel = await guild.channels.fetch(GENERAL_CHANNEL_ID).catch(() => null);
+
+  if (!channel) {
+    console.log("General channel not found.");
+    return null;
+  }
+
+  if (!channel.isTextBased()) {
+    console.log("GENERAL_CHANNEL_ID is not a text channel.");
+    return null;
+  }
+
+  return channel;
+}
+
+async function getOrCreateLoungeStatusMessage(guild) {
+  const channel = await getGeneralTextChannel(guild);
+  if (!channel) {
+    return null;
+  }
+
+  const state = readLoungeStatusState();
+  const existingMessageId = state[guild.id];
+
+  if (existingMessageId) {
+    const existingMessage = await channel.messages.fetch(existingMessageId).catch(() => null);
+    if (existingMessage) {
+      return existingMessage;
+    }
+  }
+
+  const createdMessage = await channel.send({
+    content: "Initializing lounge status...",
+    allowedMentions: { parse: [] },
+  });
+
+  try {
+    await createdMessage.pin();
+  } catch (error) {
+    console.error("Failed to pin lounge status message:", error);
+  }
+
+  writeLoungeStatusState({
+    ...state,
+    [guild.id]: createdMessage.id,
+  });
+
+  return createdMessage;
+}
+
+async function updateLoungeStatusMessage(guild, recentActivity = null) {
+  if (!LOUNGE_VOICE_CHANNEL_ID) {
+    return;
+  }
+
+  const loungeChannel = await guild.channels.fetch(LOUNGE_VOICE_CHANNEL_ID).catch(() => null);
+  if (!loungeChannel || !("members" in loungeChannel)) {
+    console.log("Lounge voice channel not found for status update.");
+    return;
+  }
+
+  const memberNames = [...loungeChannel.members.values()]
+    .filter((member) => !member.user.bot)
+    .map((member) => member.displayName || member.user.username)
+    .sort((a, b) => a.localeCompare(b));
+
+  const statusLines = [
+    "**Casual Loungin'**",
+    memberNames.length
+      ? `Currently loungin': ${memberNames.join(", ")}`
+      : "Currently loungin': nobody",
+    `Headcount: ${memberNames.length}`,
+    `Last update: ${formatTimestamp()}`,
+  ];
+
+  if (recentActivity) {
+    statusLines.push(`Recent activity: ${recentActivity}`);
+  }
+
+  const statusMessage = await getOrCreateLoungeStatusMessage(guild);
+  if (!statusMessage) {
+    return;
+  }
+
+  await statusMessage.edit({
+    content: statusLines.join("\n"),
+    allowedMentions: { parse: [] },
+  });
 }
 
 function clampLibraryPage(page, totalTracks) {
@@ -509,51 +636,49 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
   try {
     const member = newState.member || oldState.member;
     if (!member || member.user.bot) return;
-
-    // only care about actual channel changes
     if (oldState.channelId === newState.channelId) return;
+    if (!LOUNGE_VOICE_CHANNEL_ID) return;
 
     const displayName = member.displayName || member.user.username;
+    const joinedLounge =
+      !oldState.channelId && newState.channelId === LOUNGE_VOICE_CHANNEL_ID;
+    const leftLounge =
+      oldState.channelId === LOUNGE_VOICE_CHANNEL_ID && !newState.channelId;
+    const movedIntoLounge =
+      oldState.channelId !== LOUNGE_VOICE_CHANNEL_ID &&
+      newState.channelId === LOUNGE_VOICE_CHANNEL_ID;
+    const movedOutOfLounge =
+      oldState.channelId === LOUNGE_VOICE_CHANNEL_ID &&
+      newState.channelId !== LOUNGE_VOICE_CHANNEL_ID;
 
-    // joined a voice channel
+    if (!joinedLounge && !leftLounge && !movedIntoLounge && !movedOutOfLounge) {
+      return;
+    }
+
     if (!oldState.channelId && newState.channelId) {
       const voiceChannel = newState.channel;
       if (!voiceChannel) return;
 
       console.log(`${displayName} joined ${voiceChannel.name}`);
-
-      if (voiceChannel.id !== PRIVATE_VOICE_CHANNEL_ID) {
-        await sendToGeneral(
-          newState.guild,
-          `🎵💻 ${displayName} is loungin'. 💻🎵`
-        );
-      } else {
-        console.log("Private voice channel joined, skipping general message.");
-      }
-
+      await updateLoungeStatusMessage(
+        newState.guild,
+        `${displayName} joined Casual Loungin'`
+      );
       return;
     }
 
-    // left voice entirely
     if (oldState.channelId && !newState.channelId) {
       const voiceChannel = oldState.channel;
       if (!voiceChannel) return;
 
       console.log(`${displayName} left ${voiceChannel.name}`);
-
-      if (voiceChannel.id !== PRIVATE_VOICE_CHANNEL_ID) {
-        await sendToGeneral(
-          oldState.guild,
-          `💻🎵 ${displayName} is no longer loungin'. 🎵💻`
-        );
-      } else {
-        console.log("Private voice channel left, skipping general message.");
-      }
-
+      await updateLoungeStatusMessage(
+        oldState.guild,
+        `${displayName} left Casual Loungin'`
+      );
       return;
     }
 
-    // moved from one channel to another
     if (oldState.channelId && newState.channelId) {
       const oldChannel = oldState.channel;
       const newChannel = newState.channel;
@@ -562,19 +687,12 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
         `${displayName} moved from ${oldChannel?.name || oldState.channelId} to ${newChannel?.name || newState.channelId}`
       );
 
-      if (oldChannel && oldChannel.id !== PRIVATE_VOICE_CHANNEL_ID) {
-        await sendToGeneral(
-          oldState.guild,
-          `💻🎵 ${displayName} is no longer loungin'. 🎵💻`
-        );
-      }
+      const activity =
+        newChannel?.id === LOUNGE_VOICE_CHANNEL_ID
+          ? `${displayName} joined Casual Loungin'`
+          : `${displayName} left Casual Loungin'`;
 
-      if (newChannel && newChannel.id !== PRIVATE_VOICE_CHANNEL_ID) {
-        await sendToGeneral(
-          newState.guild,
-          `🎵💻 ${displayName} is loungin'. 💻🎵`
-        );
-      }
+      await updateLoungeStatusMessage(newState.guild, activity);
     }
   } catch (err) {
     console.error("voiceStateUpdate handler failed:", err);
