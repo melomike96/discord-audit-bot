@@ -112,6 +112,18 @@
       "filePath": "/opt/render/project/src/audio/library/de-la-soul-itzsoweezee-hot-official-music-video-hd-0425e14d.wav",
       "status": "ready",
       "addedAt": "2026-03-14T14:52:19.458Z"
+    },
+    {
+      "id": "uxJDkVgSBaY",
+      "title": "De La Soul - Breakadawn (Official Audio)",
+      "canonicalUrl": "https://www.youtube.com/watch?v=uxJDkVgSBaY",
+      "sourceUrl": "https://www.youtube.com/watch?v=uxJDkVgSBaY",
+      "uploader": "WeAreDeLaSoul",
+      "durationSeconds": 255,
+      "fileName": "de-la-soul-breakadawn-official-audio-c4a01ef6.mp3",
+      "filePath": "/opt/render/project/src/audio/library/de-la-soul-breakadawn-official-audio-c4a01ef6.mp3",
+      "status": "ready",
+      "addedAt": "2026-03-14T22:29:11.588Z"
     }
   ]
 }
