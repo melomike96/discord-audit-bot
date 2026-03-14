@@ -289,7 +289,13 @@ async function getOrCreateLoungeStatusMessage(guild) {
   }
 
   const createdMessage = await channel.send({
-    content: "Initializing lounge status...",
+    content: null,
+    embeds: [
+      new EmbedBuilder()
+        .setTitle("Casual Loungin'")
+        .setDescription("Initializing lounge status...")
+        .setColor(0x5865f2),
+    ],
     allowedMentions: { parse: [] },
   });
 
@@ -316,19 +322,29 @@ async function updateLoungeStatusMessage(guild, recentActivity = null) {
     .filter((member) => !member.user.bot)
     .map((member) => member.displayName || member.user.username)
     .sort((a, b) => a.localeCompare(b));
-
-  const statusLines = [
-    "**Casual Loungin'**",
-    memberNames.length
-      ? `Currently loungin: ${memberNames.join(", ")}`
-      : "Currently loungin: nobody",
-    `Headcount: ${memberNames.length}`,
-    `Last update: ${formatTimestamp()}`,
-  ];
-
-  if (recentActivity) {
-    statusLines.push(`Recent activity: ${recentActivity}`);
-  }
+  const embed = new EmbedBuilder()
+    .setTitle("Casual Loungin'")
+    .setColor(memberNames.length ? 0x57f287 : 0x747f8d)
+    .addFields(
+      {
+        name: "Currently Loungin",
+        value: memberNames.length ? memberNames.join("\n") : "Nobody in the channel",
+        inline: false,
+      },
+      {
+        name: "Headcount",
+        value: String(memberNames.length),
+        inline: true,
+      },
+      {
+        name: "Last Update",
+        value: formatTimestamp(),
+        inline: true,
+      }
+    )
+    .setFooter({
+      text: recentActivity || "Watching for lounge activity",
+    });
 
   const statusMessage = await getOrCreateLoungeStatusMessage(guild);
   if (!statusMessage) {
@@ -336,7 +352,8 @@ async function updateLoungeStatusMessage(guild, recentActivity = null) {
   }
 
   await statusMessage.edit({
-    content: statusLines.join("\n"),
+    content: null,
+    embeds: [embed],
     allowedMentions: { parse: [] },
   });
 }
