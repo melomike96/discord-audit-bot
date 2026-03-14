@@ -124,6 +124,18 @@
       "filePath": "/opt/render/project/src/audio/library/de-la-soul-itzsoweezee-hot-official-music-video-hd-0425e14d.mp3",
       "status": "ready",
       "addedAt": "2026-03-14T22:30:47.957Z"
+    },
+    {
+      "id": "wqVsfGQ_1SU",
+      "title": "The Pharcyde - Drop (Official HD Music Video)",
+      "canonicalUrl": "https://www.youtube.com/watch?v=wqVsfGQ_1SU",
+      "sourceUrl": "https://www.youtube.com/watch?v=wqVsfGQ_1SU",
+      "uploader": "PHARCYDE TV",
+      "durationSeconds": 212,
+      "fileName": "the-pharcyde-drop-official-hd-music-video-c0f77355.mp3",
+      "filePath": "/opt/render/project/src/audio/library/the-pharcyde-drop-official-hd-music-video-c0f77355.mp3",
+      "status": "ready",
+      "addedAt": "2026-03-14T22:37:44.961Z"
     }
   ]
 }
