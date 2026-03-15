@@ -23,6 +23,7 @@ const {
 const {
   linkSteamAccount,
   getLinkedSteamAccount,
+  getRecentlyPlayedGames,
   unlinkSteamAccount,
   SteamLinkError,
 } = require("./steamLinkService");
@@ -590,6 +591,10 @@ function formatTimestamp(date = new Date()) {
   });
 }
 
+function formatSteamHours(minutes) {
+  return `${((Number(minutes) || 0) / 60).toFixed(1)}h`;
+}
+
 function getTrackedLoungeChannelId() {
   return radioState.activeChannelId || LOUNGE_VOICE_CHANNEL_ID || null;
 }
@@ -944,12 +949,52 @@ client.on("messageCreate", async (message) => {
         return;
       }
 
-      await message.reply(
-        [
-          `Linked Steam account: **${linked.steamPersonaName}**`,
-          linked.steamProfileUrl,
-        ].join("\n")
-      );
+      try {
+        const recentGames = await getRecentlyPlayedGames(linked.steamId, 5);
+        const recentGamesText = recentGames.length
+          ? recentGames
+              .map((game, index) => {
+                const lastTwoWeeks = formatSteamHours(game.playtime_2weeks);
+                const total = formatSteamHours(game.playtime_forever);
+                return `${index + 1}. **${game.name}** - ${lastTwoWeeks} last 2 weeks, ${total} total`;
+              })
+              .join("\n")
+          : "No recent Steam games available.";
+
+        const embed = buildStationEmbed({
+          title: "My Steam",
+          description: `**${linked.steamPersonaName}**\n${linked.steamProfileUrl}`,
+          color: 0x1b2838,
+          footer: linked.visibilityState >= 3 ? "Steam link active" : "Steam profile may be private",
+        }).addFields({
+          name: "Recently Played",
+          value: recentGamesText.slice(0, 1024),
+          inline: false,
+        });
+
+        await message.reply({
+          embeds: [embed],
+        });
+      } catch (error) {
+        if (error instanceof SteamLinkError) {
+          console.error("mysteam failed:", error.message, error.details || "");
+          await message.reply(
+            [
+              `Linked Steam account: **${linked.steamPersonaName}**`,
+              linked.steamProfileUrl,
+              `Recent games unavailable: ${error.userMessage}`,
+            ].join("\n")
+          );
+        } else {
+          console.error("mysteam unexpected failure:", error);
+          await message.reply(
+            [
+              `Linked Steam account: **${linked.steamPersonaName}**`,
+              linked.steamProfileUrl,
+            ].join("\n")
+          );
+        }
+      }
       return;
     }
 

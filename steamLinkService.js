@@ -166,6 +166,32 @@ async function resolveSteamProfile(input) {
   return getPlayerSummary(apiKey, steamId);
 }
 
+async function getRecentlyPlayedGames(steamId, count = 5) {
+  const apiKey = getSteamApiKey();
+
+  try {
+    const response = await axios.get(
+      `${STEAM_API_BASE}/IPlayerService/GetRecentlyPlayedGames/v1/`,
+      {
+        params: {
+          key: apiKey,
+          steamid: steamId,
+          count,
+        },
+        timeout: 10000,
+      }
+    );
+
+    return response.data?.response?.games || [];
+  } catch (error) {
+    throw new SteamLinkError(
+      "Steam recent games lookup failed",
+      "I couldn't read recent Steam games right now.",
+      error.message
+    );
+  }
+}
+
 async function linkSteamAccount({ discordUserId, discordUsername, input }) {
   const profile = await resolveSteamProfile(input);
   const links = loadSteamLinks();
@@ -208,6 +234,7 @@ function unlinkSteamAccount(discordUserId) {
 module.exports = {
   linkSteamAccount,
   getLinkedSteamAccount,
+  getRecentlyPlayedGames,
   unlinkSteamAccount,
   SteamLinkError,
 };
