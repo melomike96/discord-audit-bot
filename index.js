@@ -834,6 +834,44 @@ client.on("messageCreate", async (message) => {
       return;
     }
 
+    if (
+      content === "!librarysync" ||
+      content === "!syncLibrary" ||
+      content === "!refreshlibrary" ||
+      content === "/librarysync"
+    ) {
+      console.log(`!librarysync received from ${message.author.username}`);
+      await message.reply("🔄 Syncing lounge library from GitHub...");
+
+      try {
+        const hydrationResult = await hydrateLibraryFromGithub();
+
+        if (!hydrationResult.hydrated) {
+          const reasonMessage = hydrationResult.reason === "disabled"
+            ? "Library sync is currently disabled for this bot instance."
+            : `Library sync skipped (${hydrationResult.reason || "unknown reason"}).`;
+
+          await message.reply(`⚠️ ${reasonMessage}`);
+          return;
+        }
+
+        const tracks = getLibraryTracks();
+
+        await message.reply(
+          [
+            "✅ Library sync complete.",
+            `Downloaded missing tracks: **${hydrationResult.downloadedTracks || 0}**`,
+            `Ready tracks available: **${tracks.length}**`,
+          ].join("\n")
+        );
+      } catch (error) {
+        console.error("Library sync command failed:", error);
+        await message.reply("❌ Library sync failed. Please try again in a bit.");
+      }
+
+      return;
+    }
+
     if (/^!addtrack\b/i.test(content) && !parseAddTrackCommand(content)) {
       await message.reply("Please provide a YouTube link. Example: `!addtrack https://www.youtube.com/watch?v=dQw4w9WgXcQ`");
       return;
@@ -899,6 +937,7 @@ client.on("messageCreate", async (message) => {
           "`!track` - show current track",
           "`!recent` - show recent spins",
           "`!library` or `/library` - show tracks in the library",
+          "`!librarysync` or `!refreshlibrary` - sync library files/catalog and refresh available tracks",
           "`!addtrack <youtubeLink>` - submit a YouTube track",
         ].join("\n")
       );

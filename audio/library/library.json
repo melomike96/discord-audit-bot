@@ -160,6 +160,19 @@
       "filePath": "/opt/render/project/src/audio/library/smif-n-wessun-bucktown-original-video-09328dc4.mp3",
       "status": "ready",
       "addedAt": "2026-03-14T22:43:04.776Z"
+    },
+    {
+      "id": "pTCp0kJYF30",
+      "title": "OMEGAH RED feat. MF DOOM and RZA - Books of War",
+      "canonicalUrl": "https://www.youtube.com/watch?v=pTCp0kJYF30",
+      "sourceUrl": "https://www.youtube.com/watch?v=pTCp0kJYF30",
+      "uploader": "Importan Joe",
+      "durationSeconds": 354,
+      "fileName": "omegah-red-feat-mf-doom-and-rza-books-of-war-42dd1b1c.mp3",
+      "filePath": "/opt/render/project/src/audio/library/omegah-red-feat-mf-doom-and-rza-books-of-war-42dd1b1c.mp3",
+      "requestedBy": "melomike.",
+      "status": "ready",
+      "addedAt": "2026-03-14T23:02:21.484Z"
     }
   ]
 }
