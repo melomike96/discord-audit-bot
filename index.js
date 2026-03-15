@@ -28,6 +28,7 @@ const {
   skipCurrentTrack,
   getCurrentTrack,
   getLibraryTracks,
+  getRecentTrackHistory,
   hasActiveSession,
   requestTrackPlayback,
   setRadioLifecycleHandlers,
@@ -41,6 +42,10 @@ const LOCK_PATH = path.join(__dirname, ".bot.lock");
 const LOUNGE_STATUS_PATH = path.join(__dirname, ".lounge-status.json");
 const BOT_METRICS_PATH = path.join(__dirname, ".bot-metrics.json");
 const LIBRARY_PAGE_SIZE = 10;
+const STATION_NAME = "Melo Lounge FM";
+const STATION_ACCENT = 0xc08457;
+const STATION_ALT_ACCENT = 0x57f287;
+const STATION_MANUAL_ACCENT = 0xf59e0b;
 const LOCAL_YT_DLP_CANDIDATES = [
   path.join(__dirname, ".runtime", "bin", process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp"),
   path.join(__dirname, ".render", "bin", "yt-dlp"),
@@ -322,6 +327,42 @@ function formatDuration(durationSeconds) {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
+function formatRelativeDate(value) {
+  if (!value) {
+    return "Unknown";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "Unknown";
+  }
+
+  return date.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "America/New_York",
+  });
+}
+
+function buildStationEmbed({ title, description, color = STATION_ACCENT, footer = null }) {
+  const embed = new EmbedBuilder()
+    .setAuthor({
+      name: STATION_NAME,
+    })
+    .setTitle(title)
+    .setDescription(description)
+    .setColor(color)
+    .setTimestamp(new Date());
+
+  if (footer) {
+    embed.setFooter({ text: footer });
+  }
+
+  return embed;
+}
+
 async function getLogTextChannel(guild) {
   if (!LOG_CHANNEL_ID) {
     console.log("LOG_CHANNEL_ID missing, skipping log embed.");
@@ -360,11 +401,18 @@ async function sendEmbedToLog(guild, embed) {
 }
 
 function buildNowPlayingEmbed(track, { isManualRequest = false } = {}) {
-  const accentColor = isManualRequest ? 0xf59e0b : 0x57f287;
-  const embed = new EmbedBuilder()
-    .setTitle(isManualRequest ? "Now Playing: Pick Up Next" : "Now Playing")
-    .setDescription(`**${track.title || track.name}**`)
-    .setColor(accentColor)
+  const accentColor = isManualRequest ? STATION_MANUAL_ACCENT : STATION_ALT_ACCENT;
+  const footerText = isManualRequest
+    ? `Manual pick${track.queuedBy ? ` queued by ${track.queuedBy}` : ""}${track.requestedBy ? ` | library add by ${track.requestedBy}` : ""}`
+    : track.requestedBy
+      ? `Library add by ${track.requestedBy}`
+      : "Automated lounge rotation";
+  const embed = buildStationEmbed({
+    title: isManualRequest ? "Now Playing" : "On Air Now",
+    description: `**${track.title || track.name}**`,
+    color: accentColor,
+    footer: footerText,
+  })
     .addFields(
       {
         name: "Artist / Uploader",
@@ -380,32 +428,64 @@ function buildNowPlayingEmbed(track, { isManualRequest = false } = {}) {
         name: "Source",
         value: track.sourceUrl ? `[Open track](${track.sourceUrl})` : "Library file",
         inline: true,
+      },
+      {
+        name: "Added",
+        value: formatRelativeDate(track.addedAt),
+        inline: true,
       }
-    )
-    .setFooter({
-      text: isManualRequest
-        ? `Queued by lounge interaction${track.requestedBy ? ` • Added by ${track.requestedBy}` : ""}`
-        : track.requestedBy
-          ? `Added by ${track.requestedBy}`
-          : "Spinning from the lounge library",
-    })
-    .setTimestamp(new Date());
+    );
 
   return embed;
 }
 
+function buildUpNextEmbed(track, requestedBy) {
+  return buildStationEmbed({
+    title: "Up Next",
+    description: `**${track.title || track.name}** is queued ${requestedBy ? `by **${requestedBy}**` : "from the library menu"}.`,
+    color: STATION_MANUAL_ACCENT,
+    footer: track.requestedBy ? `Library add by ${track.requestedBy}` : "Manual lounge selection",
+  }).addFields(
+    {
+      name: "Artist / Uploader",
+      value: track.uploader || "Unknown",
+      inline: true,
+    },
+    {
+      name: "Duration",
+      value: formatDuration(track.durationSeconds),
+      inline: true,
+    },
+    {
+      name: "Source",
+      value: track.sourceUrl ? `[Open track](${track.sourceUrl})` : "Library file",
+      inline: true,
+    }
+  );
+}
+
 function buildMilestoneEmbed({ title, description, color = 0x5865f2, footer = null }) {
-  const embed = new EmbedBuilder()
-    .setTitle(title)
-    .setDescription(description)
-    .setColor(color)
-    .setTimestamp(new Date());
+  return buildStationEmbed({ title, description, color, footer });
+}
 
-  if (footer) {
-    embed.setFooter({ text: footer });
-  }
+function buildRecentHistoryEmbed() {
+  const recentTracks = getRecentTrackHistory();
+  const description = recentTracks.length
+    ? recentTracks
+        .slice(0, 5)
+        .map((track, index) => {
+          const queueMarker = track.queuedBy ? ` [queued by ${track.queuedBy}]` : "";
+          return `${index + 1}. **${track.title || track.name}**${track.uploader ? ` - ${track.uploader}` : ""}${queueMarker}`;
+        })
+        .join("\n")
+    : "No spins recorded yet this session.";
 
-  return embed;
+  return buildStationEmbed({
+    title: "Recent Spins",
+    description,
+    color: STATION_ACCENT,
+    footer: recentTracks[0]?.playedAt ? `Latest spin ${formatRelativeDate(recentTracks[0].playedAt)}` : "Spin history starts when radio plays",
+  });
 }
 
 async function maybeSendLibraryMilestone(guild, addedTrack) {
@@ -472,21 +552,10 @@ function formatTimestamp(date = new Date()) {
   });
 }
 
-async function getGeneralTextChannel(guild) {
-  if (!GENERAL_CHANNEL_ID) {
-    console.log("GENERAL_CHANNEL_ID missing, skipping lounge status update.");
-    return null;
-  }
-
-  const channel = await guild.channels.fetch(GENERAL_CHANNEL_ID).catch(() => null);
-
+async function getStatusTextChannel(guild) {
+  const channel = await getLogTextChannel(guild);
   if (!channel) {
-    console.log("General channel not found.");
-    return null;
-  }
-
-  if (!channel.isTextBased()) {
-    console.log("GENERAL_CHANNEL_ID is not a text channel.");
+    console.log("Log channel unavailable for lounge status update.");
     return null;
   }
 
@@ -494,7 +563,7 @@ async function getGeneralTextChannel(guild) {
 }
 
 async function getOrCreateLoungeStatusMessage(guild) {
-  const channel = await getGeneralTextChannel(guild);
+  const channel = await getStatusTextChannel(guild);
   if (!channel) {
     return null;
   }
@@ -742,8 +811,20 @@ client.on("messageCreate", async (message) => {
       console.log(`!track received from ${message.author.username}`);
       const track = getCurrentTrack();
       await message.reply(
-        track ? `Now playing: **${track.name}**` : "Nothing playing right now."
+        track
+          ? {
+              embeds: [buildNowPlayingEmbed(track, { isManualRequest: Boolean(track.queuedBy) })],
+            }
+          : "Nothing playing right now."
       );
+      return;
+    }
+
+    if (content === "!recent" || content === "!history") {
+      console.log(`!recent received from ${message.author.username}`);
+      await message.reply({
+        embeds: [buildRecentHistoryEmbed()],
+      });
       return;
     }
 
@@ -816,6 +897,7 @@ client.on("messageCreate", async (message) => {
           "`!stop` - stop radio",
           "`!skip` - skip current track",
           "`!track` - show current track",
+          "`!recent` - show recent spins",
           "`!library` or `/library` - show tracks in the library",
           "`!addtrack <youtubeLink>` - submit a YouTube track",
         ].join("\n")
@@ -848,7 +930,9 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     const requestedFileName = interaction.values[0];
-    const result = requestTrackPlayback(requestedFileName);
+    const result = requestTrackPlayback(requestedFileName, {
+      requestedBy: interaction.user.username,
+    });
 
     if (!result.ok) {
       const failureMessage =
@@ -879,6 +963,10 @@ client.on("interactionCreate", async (interaction) => {
         : `Queued **${result.track.name}** to play next.`,
       ephemeral: true,
     });
+
+    if (interaction.guild) {
+      await sendEmbedToLog(interaction.guild, buildUpNextEmbed(result.track, interaction.user.username));
+    }
 
     if (interaction.message?.editable) {
       await interaction.message.edit(buildLibraryMessage(0)).catch(() => {});

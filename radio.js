@@ -21,6 +21,8 @@ const state = {
   activeChannelId: null,
   activeGuildId: null,
   recentlyPlayed: [],
+  recentTrackHistory: [],
+  manualNextTrackRequestedBy: null,
 };
 const lifecycleHandlers = {
   trackStart: null,
@@ -234,12 +236,16 @@ async function startLoungeSession({ guild, voiceChannel, introPath = null }) {
       }
 
       state.currentTrack = track;
+      state.currentTrack.queuedBy = selection.isManualRequest ? state.manualNextTrackRequestedBy : null;
       state.currentAudioLabel = track.name;
       state.skipRequested = false;
 
       console.log("Random track chosen:", track.name);
       lifecycleHandlers.trackStart?.({
-        track,
+        track: {
+          ...track,
+          queuedBy: state.currentTrack.queuedBy,
+        },
         guildId: guild.id,
         channelId: voiceChannel.id,
         isManualRequest: selection.isManualRequest,
@@ -250,6 +256,20 @@ async function startLoungeSession({ guild, voiceChannel, introPath = null }) {
       } catch (err) {
         console.error("Track playback failed:", err);
       } finally {
+        state.recentTrackHistory.unshift({
+          fileName: track.fileName,
+          name: track.name,
+          title: track.title || track.name,
+          uploader: track.uploader || null,
+          sourceUrl: track.sourceUrl || null,
+          playedAt: new Date().toISOString(),
+          queuedBy: state.currentTrack?.queuedBy || null,
+          requestedBy: track.requestedBy || null,
+        });
+        if (state.recentTrackHistory.length > 10) {
+          state.recentTrackHistory.length = 10;
+        }
+
         lifecycleHandlers.trackEnd?.({
           track,
           guildId: guild.id,
@@ -259,6 +279,7 @@ async function startLoungeSession({ guild, voiceChannel, introPath = null }) {
       }
 
       state.currentAudioLabel = null;
+      state.manualNextTrackRequestedBy = null;
 
       if (state.stopRequested) break;
     }
@@ -304,7 +325,7 @@ function hasActiveSession() {
   return state.isPlaying;
 }
 
-function requestTrackPlayback(fileName) {
+function requestTrackPlayback(fileName, options = {}) {
   const track = getLibraryTracks().find((entry) => entry.fileName === fileName);
 
   if (!track) {
@@ -316,6 +337,10 @@ function requestTrackPlayback(fileName) {
   }
 
   state.manualNextTrack = track;
+  state.manualNextTrackRequestedBy =
+    typeof options.requestedBy === "string" && options.requestedBy.trim()
+      ? options.requestedBy.trim()
+      : null;
   console.log("Manual track requested:", track.name);
 
   if (state.currentAudioLabel) {
@@ -342,6 +367,7 @@ function cleanupSession() {
   state.currentTrack = null;
   state.currentAudioLabel = null;
   state.manualNextTrack = null;
+  state.manualNextTrackRequestedBy = null;
   state.isPlaying = false;
   state.stopRequested = false;
   state.skipRequested = false;
@@ -349,6 +375,10 @@ function cleanupSession() {
   state.activeGuildId = null;
 
   console.log("Session cleaned up.");
+}
+
+function getRecentTrackHistory() {
+  return [...state.recentTrackHistory];
 }
 
 function setRadioLifecycleHandlers(handlers = {}) {
@@ -368,6 +398,7 @@ module.exports = {
   hasActiveSession,
   getLibraryTracks,
   requestTrackPlayback,
+  getRecentTrackHistory,
   setRadioLifecycleHandlers,
   state,
 };
