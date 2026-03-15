@@ -186,6 +186,19 @@
       "requestedBy": "melomike.",
       "status": "ready",
       "addedAt": "2026-03-15T05:39:45.458Z"
+    },
+    {
+      "id": "R2P0XrkMy-c",
+      "title": "Hell on Earth (Front Lines)",
+      "canonicalUrl": "https://www.youtube.com/watch?v=R2P0XrkMy-c",
+      "sourceUrl": "https://www.youtube.com/watch?v=R2P0XrkMy-c",
+      "uploader": "Mobb Deep",
+      "durationSeconds": 274,
+      "fileName": "hell-on-earth-front-lines-88d39657.mp3",
+      "filePath": "/opt/render/project/src/audio/library/hell-on-earth-front-lines-88d39657.mp3",
+      "requestedBy": "melomike.",
+      "status": "ready",
+      "addedAt": "2026-03-15T16:34:55.002Z"
     }
   ]
 }
