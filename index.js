@@ -622,8 +622,8 @@ async function updateLoungeStatusMessage(guild, recentActivity = null) {
         inline: false,
       },
       {
-        name: "Headcount",
-        value: String(memberNames.length),
+        name: "Radio",
+        value: hasActiveSession() ? "Active" : "Inactive",
         inline: true,
       },
       {
