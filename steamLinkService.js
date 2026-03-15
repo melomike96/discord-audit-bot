@@ -218,6 +218,59 @@ function getLinkedSteamAccount(discordUserId) {
   return links[discordUserId] || null;
 }
 
+function getAllLinkedSteamAccounts() {
+  const links = loadSteamLinks();
+  return Object.values(links);
+}
+
+async function getSteamPresenceForAccounts(accounts) {
+  const apiKey = getSteamApiKey();
+  const eligibleAccounts = accounts.filter(
+    (account) => account && account.steamId && account.showCurrentGame !== false && account.showInWhoIsGaming !== false
+  );
+
+  if (!eligibleAccounts.length) {
+    return [];
+  }
+
+  const steamIds = eligibleAccounts.map((account) => account.steamId).join(",");
+
+  try {
+    const response = await axios.get(
+      `${STEAM_API_BASE}/ISteamUser/GetPlayerSummaries/v2/`,
+      {
+        params: {
+          key: apiKey,
+          steamids: steamIds,
+        },
+        timeout: 10000,
+      }
+    );
+
+    const players = response.data?.response?.players || [];
+    const playersBySteamId = new Map(players.map((player) => [player.steamid, player]));
+
+    return eligibleAccounts.map((account) => {
+      const player = playersBySteamId.get(account.steamId);
+
+      return {
+        ...account,
+        isOnline: Boolean(player && Number(player.personastate) > 0),
+        currentGameName: player?.gameextrainfo || null,
+        currentGameId: player?.gameid || null,
+        personaState: player?.personastate ?? 0,
+        lastLogoff: player?.lastlogoff || null,
+      };
+    });
+  } catch (error) {
+    throw new SteamLinkError(
+      "Steam presence lookup failed",
+      "I couldn't read linked Steam presence right now.",
+      error.message
+    );
+  }
+}
+
 function unlinkSteamAccount(discordUserId) {
   const links = loadSteamLinks();
   const existing = links[discordUserId] || null;
@@ -234,7 +287,9 @@ function unlinkSteamAccount(discordUserId) {
 module.exports = {
   linkSteamAccount,
   getLinkedSteamAccount,
+  getAllLinkedSteamAccounts,
   getRecentlyPlayedGames,
+  getSteamPresenceForAccounts,
   unlinkSteamAccount,
   SteamLinkError,
 };

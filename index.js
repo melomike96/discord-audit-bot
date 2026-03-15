@@ -23,7 +23,9 @@ const {
 const {
   linkSteamAccount,
   getLinkedSteamAccount,
+  getAllLinkedSteamAccounts,
   getRecentlyPlayedGames,
+  getSteamPresenceForAccounts,
   unlinkSteamAccount,
   SteamLinkError,
 } = require("./steamLinkService");
@@ -595,6 +597,45 @@ function formatSteamHours(minutes) {
   return `${((Number(minutes) || 0) / 60).toFixed(1)}h`;
 }
 
+function buildWhoIsGamingEmbed(presenceEntries) {
+  const activePlayers = presenceEntries.filter((entry) => entry.currentGameName);
+  const onlineNoGame = presenceEntries.filter((entry) => entry.isOnline && !entry.currentGameName);
+  const groupedGames = new Map();
+
+  for (const entry of activePlayers) {
+    const current = groupedGames.get(entry.currentGameName) || [];
+    current.push(entry.discordUsername || entry.steamPersonaName);
+    groupedGames.set(entry.currentGameName, current);
+  }
+
+  const activeLines = activePlayers.length
+    ? [...groupedGames.entries()]
+        .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))
+        .map(([gameName, players]) => `**${gameName}**\n${players.join(", ")}`)
+        .join("\n\n")
+    : "No linked members are in a Steam game right now.";
+
+  const embed = buildStationEmbed({
+    title: "Who's Gaming",
+    description: activeLines,
+    color: activePlayers.length ? 0x1b2838 : 0x747f8d,
+    footer: `${activePlayers.length} in-game | ${onlineNoGame.length} online | ${presenceEntries.length} linked`,
+  });
+
+  if (onlineNoGame.length) {
+    embed.addFields({
+      name: "Online on Steam",
+      value: onlineNoGame
+        .map((entry) => entry.discordUsername || entry.steamPersonaName)
+        .join(", ")
+        .slice(0, 1024),
+      inline: false,
+    });
+  }
+
+  return embed;
+}
+
 function getTrackedLoungeChannelId() {
   return radioState.activeChannelId || LOUNGE_VOICE_CHANNEL_ID || null;
 }
@@ -900,6 +941,34 @@ client.on("messageCreate", async (message) => {
       return;
     }
 
+    if (content === "!whoson" || content === "!gaming" || content === "!steamnow") {
+      console.log(`!whoson received from ${message.author.username}`);
+
+      try {
+        const linkedAccounts = getAllLinkedSteamAccounts();
+
+        if (!linkedAccounts.length) {
+          await message.reply("No Steam accounts are linked yet.");
+          return;
+        }
+
+        const presenceEntries = await getSteamPresenceForAccounts(linkedAccounts);
+        await message.reply({
+          embeds: [buildWhoIsGamingEmbed(presenceEntries)],
+        });
+      } catch (error) {
+        if (error instanceof SteamLinkError) {
+          console.error("whoson failed:", error.message, error.details || "");
+          await message.reply(`❌ ${error.userMessage}`);
+        } else {
+          console.error("whoson unexpected failure:", error);
+          await message.reply("❌ Couldn't read Steam activity right now.");
+        }
+      }
+
+      return;
+    }
+
     if (/^!linksteam\b/i.test(content) && !parseLinkSteamCommand(content)) {
       await message.reply("Provide a Steam profile URL, custom URL, or SteamID64. Example: `!linksteam https://steamcommunity.com/id/yourname`");
       return;
@@ -1117,6 +1186,7 @@ client.on("messageCreate", async (message) => {
           "`!linksteam <profileUrl>` - link your Steam account",
           "`!mysteam` - show your linked Steam account",
           "`!unlinksteam` - remove your linked Steam account",
+          "`!whoson` - show linked members currently on Steam",
           "`!addtrack <youtubeLink>` - submit a YouTube track",
         ].join("\n")
       );
