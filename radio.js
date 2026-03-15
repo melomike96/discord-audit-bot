@@ -42,6 +42,7 @@ const TRACK_NAME_MAP = {
 
 const LIBRARY_JSON_PATH = path.join(__dirname, "audio", "library", "library.json");
 const SUPPORTED_LIBRARY_EXTENSIONS = new Set([".wav", ".mp3", ".m4a", ".aac", ".ogg", ".flac"]);
+const DEFAULT_PLAYBACK_VOLUME = 0.3;
 
 function getCleanTrackName(fileName) {
   const baseName = path.parse(fileName).name;
@@ -159,7 +160,14 @@ async function playFile(filePath) {
   }
 
   const player = state.player;
-  const resource = createAudioResource(filePath);
+  const resource = createAudioResource(filePath, {
+    inlineVolume: true,
+  });
+
+  if (resource.volume) {
+    resource.volume.setVolume(DEFAULT_PLAYBACK_VOLUME);
+  }
+
   player.play(resource);
 
   return new Promise((resolve, reject) => {
