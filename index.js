@@ -32,6 +32,7 @@ const {
   hasActiveSession,
   requestTrackPlayback,
   setRadioLifecycleHandlers,
+  state: radioState,
 } = require("./radio");
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const GENERAL_CHANNEL_ID = process.env.GENERAL_CHANNEL_ID;
@@ -576,6 +577,10 @@ function formatTimestamp(date = new Date()) {
   });
 }
 
+function getTrackedLoungeChannelId() {
+  return radioState.activeChannelId || LOUNGE_VOICE_CHANNEL_ID || null;
+}
+
 async function getStatusTextChannel(guild) {
   if (!GENERAL_CHANNEL_ID) {
     console.log("GENERAL_CHANNEL_ID missing, skipping lounge status update.");
@@ -632,11 +637,12 @@ async function getOrCreateLoungeStatusMessage(guild) {
 }
 
 async function updateLoungeStatusMessage(guild, recentActivity = null) {
-  if (!LOUNGE_VOICE_CHANNEL_ID) {
+  const trackedChannelId = getTrackedLoungeChannelId();
+  if (!trackedChannelId) {
     return;
   }
 
-  const loungeChannel = await guild.channels.fetch(LOUNGE_VOICE_CHANNEL_ID).catch(() => null);
+  const loungeChannel = await guild.channels.fetch(trackedChannelId).catch(() => null);
   if (!loungeChannel || !("members" in loungeChannel)) {
     console.log("Lounge voice channel not found for status update.");
     return;
@@ -1069,25 +1075,26 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
     const member = newState.member || oldState.member;
     if (!member || member.user.bot) return;
     if (oldState.channelId === newState.channelId) return;
-    if (!LOUNGE_VOICE_CHANNEL_ID) return;
+    const trackedChannelId = getTrackedLoungeChannelId();
+    if (!trackedChannelId) return;
 
     const displayName = member.displayName || member.user.username;
     const joinedLounge =
-      !oldState.channelId && newState.channelId === LOUNGE_VOICE_CHANNEL_ID;
+      !oldState.channelId && newState.channelId === trackedChannelId;
     const leftLounge =
-      oldState.channelId === LOUNGE_VOICE_CHANNEL_ID && !newState.channelId;
+      oldState.channelId === trackedChannelId && !newState.channelId;
     const movedIntoLounge =
-      oldState.channelId !== LOUNGE_VOICE_CHANNEL_ID &&
-      newState.channelId === LOUNGE_VOICE_CHANNEL_ID;
+      oldState.channelId !== trackedChannelId &&
+      newState.channelId === trackedChannelId;
     const movedOutOfLounge =
-      oldState.channelId === LOUNGE_VOICE_CHANNEL_ID &&
-      newState.channelId !== LOUNGE_VOICE_CHANNEL_ID;
+      oldState.channelId === trackedChannelId &&
+      newState.channelId !== trackedChannelId;
 
     if (!joinedLounge && !leftLounge && !movedIntoLounge && !movedOutOfLounge) {
       return;
     }
 
-    const loungeChannel = await newState.guild.channels.fetch(LOUNGE_VOICE_CHANNEL_ID).catch(() => null);
+    const loungeChannel = await newState.guild.channels.fetch(trackedChannelId).catch(() => null);
     const postChangeHeadcount = loungeChannel && "members" in loungeChannel
       ? [...loungeChannel.members.values()].filter((voiceMember) => !voiceMember.user.bot).length
       : 0;
@@ -1139,7 +1146,7 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
       );
 
       const activity =
-        newChannel?.id === LOUNGE_VOICE_CHANNEL_ID
+        newChannel?.id === trackedChannelId
           ? `${displayName} joined Casual Loungin'`
           : `${displayName} left Casual Loungin'`;
 
