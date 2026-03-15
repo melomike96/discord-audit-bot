@@ -173,6 +173,11 @@ async function sendToGeneral(guild, content) {
 client.once("clientReady", () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
   console.log("===== BOT READY =====");
+  for (const guild of client.guilds.cache.values()) {
+    updateLoungeStatusMessage(guild).catch((error) => {
+      console.error("Initial lounge status update failed:", error);
+    });
+  }
 });
 
 
@@ -187,8 +192,27 @@ setRadioLifecycleHandlers({
 
       await sendEmbedToLog(guild, buildNowPlayingEmbed(track, { isManualRequest }));
       await maybeSendTrackPlayMilestone(guild, track);
+      await updateLoungeStatusMessage(guild, `Now playing: ${track.title || track.name}`);
     } catch (error) {
       console.error("trackStart handler failed:", error);
+    }
+  },
+  trackEnd: async ({ track, guildId, wasSkipped }) => {
+    try {
+      const guild = client.guilds.cache.get(guildId)
+        || await client.guilds.fetch(guildId).catch(() => null);
+      if (!guild) {
+        return;
+      }
+
+      await updateLoungeStatusMessage(
+        guild,
+        wasSkipped
+          ? `Track skipped: ${track.title || track.name}`
+          : `Track ended: ${track.title || track.name}`
+      );
+    } catch (error) {
+      console.error("trackEnd handler failed:", error);
     }
   },
 });
@@ -612,12 +636,13 @@ async function updateLoungeStatusMessage(guild, recentActivity = null) {
     .filter((member) => !member.user.bot)
     .map((member) => member.displayName || member.user.username)
     .sort((a, b) => a.localeCompare(b));
+  const currentTrack = getCurrentTrack();
   const embed = new EmbedBuilder()
     .setTitle("Casual Loungin'")
     .setColor(memberNames.length ? 0x57f287 : 0x747f8d)
     .addFields(
       {
-        name: "Currently Loungin",
+        name: `Currently Loungin' (${memberNames.length})`,
         value: memberNames.length ? memberNames.join("\n") : "Nobody in the channel",
         inline: false,
       },
@@ -627,9 +652,14 @@ async function updateLoungeStatusMessage(guild, recentActivity = null) {
         inline: true,
       },
       {
+        name: "Now Playing",
+        value: currentTrack?.title || currentTrack?.name || "Nothing live right now",
+        inline: true,
+      },
+      {
         name: "Last Update",
         value: formatTimestamp(),
-        inline: true,
+        inline: false,
       }
     )
     .setFooter({
@@ -785,6 +815,7 @@ client.on("messageCreate", async (message) => {
         voiceChannel,
         introPath,
       });
+      await updateLoungeStatusMessage(message.guild, `Radio started in ${voiceChannel.name}`);
 
       return;
     }
@@ -792,6 +823,7 @@ client.on("messageCreate", async (message) => {
     if (content === "!stop") {
       console.log(`!stop received from ${message.author.username}`);
       stopLoungeSession();
+      await updateLoungeStatusMessage(message.guild, "Radio stop requested");
       await message.reply("DJ Loungin' has been booed off stage.");
       return;
     }
