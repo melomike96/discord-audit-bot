@@ -173,6 +173,19 @@
       "requestedBy": "melomike.",
       "status": "ready",
       "addedAt": "2026-03-14T23:02:21.484Z"
+    },
+    {
+      "id": "PBwAxmrE194",
+      "title": "Wu-Tang Clan - C.R.E.A.M. (Official HD Video)",
+      "canonicalUrl": "https://www.youtube.com/watch?v=PBwAxmrE194",
+      "sourceUrl": "https://www.youtube.com/watch?v=PBwAxmrE194",
+      "uploader": "Wu-Tang Clan",
+      "durationSeconds": 242,
+      "fileName": "wu-tang-clan-cream-official-hd-video-5da49892.mp3",
+      "filePath": "/opt/render/project/src/audio/library/wu-tang-clan-cream-official-hd-video-5da49892.mp3",
+      "requestedBy": "melomike.",
+      "status": "ready",
+      "addedAt": "2026-03-15T05:39:45.458Z"
     }
   ]
 }
