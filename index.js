@@ -577,9 +577,19 @@ function formatTimestamp(date = new Date()) {
 }
 
 async function getStatusTextChannel(guild) {
-  const channel = await getLogTextChannel(guild);
+  if (!GENERAL_CHANNEL_ID) {
+    console.log("GENERAL_CHANNEL_ID missing, skipping lounge status update.");
+    return null;
+  }
+
+  const channel = await guild.channels.fetch(GENERAL_CHANNEL_ID).catch(() => null);
   if (!channel) {
-    console.log("Log channel unavailable for lounge status update.");
+    console.log("General channel unavailable for lounge status update.");
+    return null;
+  }
+
+  if (!channel.isTextBased()) {
+    console.log("GENERAL_CHANNEL_ID is not a text channel.");
     return null;
   }
 
