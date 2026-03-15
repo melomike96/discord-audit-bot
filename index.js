@@ -20,6 +20,12 @@ const {
   getYtDlpConfigSummary,
   hydrateLibraryFromGithub,
 } = require("./audio/library/addTrackService");
+const {
+  linkSteamAccount,
+  getLinkedSteamAccount,
+  unlinkSteamAccount,
+  SteamLinkError,
+} = require("./steamLinkService");
 const { resolveCommand } = require("./audio/library/resolveCommand");
 
 const {
@@ -220,6 +226,13 @@ setRadioLifecycleHandlers({
 
 function parseAddTrackCommand(content) {
   const match = content.match(/^!addtrack\s+(.+)$/i);
+  if (!match) return null;
+
+  return match[1].trim();
+}
+
+function parseLinkSteamCommand(content) {
+  const match = content.match(/^!linksteam\s+(.+)$/i);
   if (!match) return null;
 
   return match[1].trim();
@@ -882,6 +895,76 @@ client.on("messageCreate", async (message) => {
       return;
     }
 
+    if (/^!linksteam\b/i.test(content) && !parseLinkSteamCommand(content)) {
+      await message.reply("Provide a Steam profile URL, custom URL, or SteamID64. Example: `!linksteam https://steamcommunity.com/id/yourname`");
+      return;
+    }
+
+    const linkSteamInput = parseLinkSteamCommand(content);
+    if (linkSteamInput) {
+      console.log(`!linksteam received from ${message.author.username}`);
+
+      try {
+        const linked = await linkSteamAccount({
+          discordUserId: message.author.id,
+          discordUsername: message.author.username,
+          input: linkSteamInput,
+        });
+
+        const visibilityNote = linked.visibilityState >= 3
+          ? "Steam profile resolved successfully."
+          : "Steam profile resolved, but some game presence data may stay hidden if the profile is private.";
+
+        await message.reply(
+          [
+            `Linked Steam account: **${linked.steamPersonaName}**`,
+            linked.steamProfileUrl,
+            visibilityNote,
+          ].join("\n")
+        );
+      } catch (error) {
+        if (error instanceof SteamLinkError) {
+          console.error("linkSteam failed:", error.message, error.details || "");
+          await message.reply(`❌ ${error.userMessage}`);
+        } else {
+          console.error("linkSteam unexpected failure:", error);
+          await message.reply("❌ Couldn't link that Steam account right now.");
+        }
+      }
+
+      return;
+    }
+
+    if (content === "!mysteam") {
+      console.log(`!mysteam received from ${message.author.username}`);
+      const linked = getLinkedSteamAccount(message.author.id);
+
+      if (!linked) {
+        await message.reply("You don't have a linked Steam account yet. Use `!linksteam <profileUrl>` first.");
+        return;
+      }
+
+      await message.reply(
+        [
+          `Linked Steam account: **${linked.steamPersonaName}**`,
+          linked.steamProfileUrl,
+        ].join("\n")
+      );
+      return;
+    }
+
+    if (content === "!unlinksteam") {
+      console.log(`!unlinksteam received from ${message.author.username}`);
+      const removed = unlinkSteamAccount(message.author.id);
+
+      await message.reply(
+        removed
+          ? `Unlinked Steam account **${removed.steamPersonaName}**.`
+          : "You don't have a linked Steam account to remove."
+      );
+      return;
+    }
+
     if (
       content === "!librarysync" ||
       content === "!syncLibrary" ||
@@ -986,6 +1069,9 @@ client.on("messageCreate", async (message) => {
           "`!recent` - show recent spins",
           "`!library` or `/library` - show tracks in the library",
           "`!librarysync` or `!refreshlibrary` - sync library files/catalog and refresh available tracks",
+          "`!linksteam <profileUrl>` - link your Steam account",
+          "`!mysteam` - show your linked Steam account",
+          "`!unlinksteam` - remove your linked Steam account",
           "`!addtrack <youtubeLink>` - submit a YouTube track",
         ].join("\n")
       );

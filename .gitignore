@@ -4,3 +4,4 @@ node_modules
 *cookies*.txt
 *.cookies.txt
 .env.*
+.steam-links.json
