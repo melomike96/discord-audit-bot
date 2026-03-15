@@ -5,3 +5,4 @@ node_modules
 *.cookies.txt
 .env.*
 .steam-links.json
+.steam-status.json

@@ -50,6 +50,7 @@ const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID;
 const PRIVATE_VOICE_CHANNEL_ID = process.env.PRIVATE_VOICE_CHANNEL_ID;
 const LOCK_PATH = path.join(__dirname, ".bot.lock");
 const LOUNGE_STATUS_PATH = path.join(__dirname, ".lounge-status.json");
+const STEAM_STATUS_PATH = path.join(__dirname, ".steam-status.json");
 const BOT_METRICS_PATH = path.join(__dirname, ".bot-metrics.json");
 const LIBRARY_PAGE_SIZE = 10;
 const STATION_NAME = "Melo Lounge FM";
@@ -186,6 +187,9 @@ client.once("clientReady", () => {
   for (const guild of client.guilds.cache.values()) {
     updateLoungeStatusMessage(guild).catch((error) => {
       console.error("Initial lounge status update failed:", error);
+    });
+    updateSteamStatusMessage(guild).catch((error) => {
+      console.error("Initial steam status update failed:", error);
     });
   }
 });
@@ -585,6 +589,27 @@ function writeLoungeStatusState(state) {
   }
 }
 
+function readSteamStatusState() {
+  try {
+    if (!fs.existsSync(STEAM_STATUS_PATH)) {
+      return {};
+    }
+
+    return JSON.parse(fs.readFileSync(STEAM_STATUS_PATH, "utf8"));
+  } catch (error) {
+    console.error("Failed to read steam status state:", error);
+    return {};
+  }
+}
+
+function writeSteamStatusState(state) {
+  try {
+    fs.writeFileSync(STEAM_STATUS_PATH, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+  } catch (error) {
+    console.error("Failed to write steam status state:", error);
+  }
+}
+
 function formatTimestamp(date = new Date()) {
   return date.toLocaleTimeString("en-US", {
     hour: "numeric",
@@ -634,6 +659,90 @@ function buildWhoIsGamingEmbed(presenceEntries) {
   }
 
   return embed;
+}
+
+async function getOrCreateSteamStatusMessage(guild) {
+  const channel = await getLogTextChannel(guild);
+  if (!channel) {
+    return null;
+  }
+
+  const state = readSteamStatusState();
+  const existingMessageId = state[guild.id];
+
+  if (existingMessageId) {
+    const existingMessage = await channel.messages.fetch(existingMessageId).catch(() => null);
+    if (existingMessage) {
+      return existingMessage;
+    }
+  }
+
+  const createdMessage = await channel.send({
+    embeds: [
+      buildStationEmbed({
+        title: "Who's Gaming",
+        description: "Initializing Steam activity...",
+        color: 0x1b2838,
+      }),
+    ],
+    allowedMentions: { parse: [] },
+  });
+
+  writeSteamStatusState({
+    ...state,
+    [guild.id]: createdMessage.id,
+  });
+
+  return createdMessage;
+}
+
+async function updateSteamStatusMessage(guild) {
+  try {
+    const linkedAccounts = getAllLinkedSteamAccounts();
+    const statusMessage = await getOrCreateSteamStatusMessage(guild);
+
+    if (!statusMessage) {
+      return { updated: false, reason: "missing_channel" };
+    }
+
+    if (!linkedAccounts.length) {
+      await statusMessage.edit({
+        embeds: [
+          buildStationEmbed({
+            title: "Who's Gaming",
+            description: "No Steam accounts are linked yet.",
+            color: 0x747f8d,
+            footer: "Use !linksteam to get started",
+          }),
+        ],
+        allowedMentions: { parse: [] },
+      });
+
+      return { updated: true, linkedCount: 0, activeCount: 0 };
+    }
+
+    const presenceEntries = await getSteamPresenceForAccounts(linkedAccounts);
+    const activeCount = presenceEntries.filter((entry) => entry.currentGameName).length;
+
+    await statusMessage.edit({
+      embeds: [buildWhoIsGamingEmbed(presenceEntries)],
+      allowedMentions: { parse: [] },
+    });
+
+    return {
+      updated: true,
+      linkedCount: presenceEntries.length,
+      activeCount,
+    };
+  } catch (error) {
+    if (error instanceof SteamLinkError) {
+      console.error("Steam status update failed:", error.message, error.details || "");
+      return { updated: false, reason: error.userMessage };
+    }
+
+    console.error("Steam status update unexpected failure:", error);
+    return { updated: false, reason: "unexpected_error" };
+  }
 }
 
 function getTrackedLoungeChannelId() {
@@ -945,17 +1054,22 @@ client.on("messageCreate", async (message) => {
       console.log(`!whoson received from ${message.author.username}`);
 
       try {
-        const linkedAccounts = getAllLinkedSteamAccounts();
+        const result = await updateSteamStatusMessage(message.guild);
 
-        if (!linkedAccounts.length) {
-          await message.reply("No Steam accounts are linked yet.");
+        if (!result.updated) {
+          await message.reply(
+            typeof result.reason === "string"
+              ? `Couldn't refresh the Steam status card: ${result.reason}`
+              : "Couldn't refresh the Steam status card right now."
+          );
           return;
         }
 
-        const presenceEntries = await getSteamPresenceForAccounts(linkedAccounts);
-        await message.reply({
-          embeds: [buildWhoIsGamingEmbed(presenceEntries)],
-        });
+        await message.reply(
+          result.linkedCount
+            ? `Updated the Steam status card in logs. Active players: **${result.activeCount}** / linked: **${result.linkedCount}**.`
+            : "Updated the Steam status card in logs. No linked Steam accounts yet."
+        );
       } catch (error) {
         if (error instanceof SteamLinkError) {
           console.error("whoson failed:", error.message, error.details || "");
