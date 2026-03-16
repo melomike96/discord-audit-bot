@@ -202,6 +202,9 @@ async function startLoungeSession({ guild, voiceChannel, introPath = null }) {
   state.skipRequested = false;
   state.activeChannelId = voiceChannel.id;
   state.activeGuildId = guild.id;
+  state.currentAudioLabel = introPath && fs.existsSync(introPath)
+    ? "DJ Loungin' Intro"
+    : "Loading next track";
 
   try {
     state.connection = joinVoiceChannel({
@@ -329,6 +332,10 @@ function getCurrentTrack() {
   return state.currentTrack;
 }
 
+function getCurrentAudioLabel() {
+  return state.currentAudioLabel;
+}
+
 function hasActiveSession() {
   return state.isPlaying;
 }
@@ -403,6 +410,7 @@ module.exports = {
   stopLoungeSession,
   skipCurrentTrack,
   getCurrentTrack,
+  getCurrentAudioLabel,
   hasActiveSession,
   getLibraryTracks,
   requestTrackPlayback,

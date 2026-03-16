@@ -36,6 +36,7 @@ const {
   stopLoungeSession,
   skipCurrentTrack,
   getCurrentTrack,
+  getCurrentAudioLabel,
   getLibraryTracks,
   getRecentTrackHistory,
   hasActiveSession,
@@ -774,7 +775,12 @@ function truncateChannelStatusSegment(value, maxLength = 32) {
   return `${normalized.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`;
 }
 
-function buildTrackedVoiceChannelName(channel, memberCount, currentTrack) {
+function getCurrentPlaybackLabel() {
+  const currentTrack = getCurrentTrack();
+  return currentTrack?.title || currentTrack?.name || getCurrentAudioLabel() || null;
+}
+
+function buildTrackedVoiceChannelName(channel, memberCount, currentPlaybackLabel) {
   const baseName = getTrackedChannelBaseName(channel);
   const statusSegments = [hasActiveSession() ? "live" : "idle"];
 
@@ -783,7 +789,7 @@ function buildTrackedVoiceChannelName(channel, memberCount, currentTrack) {
   }
 
   if (hasActiveSession()) {
-    const trackLabel = truncateChannelStatusSegment(currentTrack?.title || currentTrack?.name, 36);
+    const trackLabel = truncateChannelStatusSegment(currentPlaybackLabel, 36);
     if (trackLabel) {
       statusSegments.push(trackLabel);
     }
@@ -795,12 +801,12 @@ function buildTrackedVoiceChannelName(channel, memberCount, currentTrack) {
     : truncateChannelStatusSegment(nextName, 100);
 }
 
-async function updateTrackedVoiceChannelStatus(guild, voiceChannel, memberCount, currentTrack) {
+async function updateTrackedVoiceChannelStatus(guild, voiceChannel, memberCount, currentPlaybackLabel) {
   if (!voiceChannel?.manageable) {
     return;
   }
 
-  const nextName = buildTrackedVoiceChannelName(voiceChannel, memberCount, currentTrack);
+  const nextName = buildTrackedVoiceChannelName(voiceChannel, memberCount, currentPlaybackLabel);
   if (voiceChannel.name === nextName) {
     return;
   }
@@ -878,9 +884,9 @@ async function updateLoungeStatusMessage(guild, recentActivity = null) {
     .map((member) => member.displayName || member.user.username)
     .sort((a, b) => a.localeCompare(b));
   const loungeName = getTrackedChannelBaseName(loungeChannel);
-  const currentTrack = getCurrentTrack();
+  const currentPlaybackLabel = getCurrentPlaybackLabel();
 
-  await updateTrackedVoiceChannelStatus(guild, loungeChannel, memberNames.length, currentTrack);
+  await updateTrackedVoiceChannelStatus(guild, loungeChannel, memberNames.length, currentPlaybackLabel);
 
   const embed = new EmbedBuilder()
     .setTitle(loungeName)
@@ -898,7 +904,7 @@ async function updateLoungeStatusMessage(guild, recentActivity = null) {
       },
       {
         name: "Now Playing",
-        value: currentTrack?.title || currentTrack?.name || "Nothing live right now",
+        value: currentPlaybackLabel || "Nothing live right now",
         inline: true,
       },
       {
@@ -1053,7 +1059,7 @@ client.on("messageCreate", async (message) => {
 
       console.log(`!start received from ${message.author.username} in ${voiceChannel.name}`);
 
-      await message.reply(`DJ Loungin' has started spinnin in **${voiceChannel.name}**.`);
+      await message.reply(`DJ Loungin' has started spinnin in **${getTrackedChannelBaseName(voiceChannel)}**.`);
 
       startLoungeSession({
         guild: message.guild,
