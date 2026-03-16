@@ -746,23 +746,80 @@ async function updateSteamStatusMessage(guild) {
 }
 
 function getTrackedLoungeChannelId() {
-  return radioState.activeChannelId || LOUNGE_VOICE_CHANNEL_ID || null;
+  return PRIVATE_VOICE_CHANNEL_ID || radioState.activeChannelId || LOUNGE_VOICE_CHANNEL_ID || null;
+}
+
+function getTrackedChannelBaseName(channel) {
+  if (!channel?.name) {
+    return "hardcore loungin";
+  }
+
+  return channel.name.replace(/\s+[|•]\s+.*$/i, "");
+}
+
+function truncateChannelStatusSegment(value, maxLength = 32) {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return "";
+  }
+
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`;
+}
+
+function buildTrackedVoiceChannelName(channel, memberCount, currentTrack) {
+  const baseName = getTrackedChannelBaseName(channel);
+  const statusSegments = [hasActiveSession() ? "live" : "idle"];
+
+  if (Number.isFinite(memberCount)) {
+    statusSegments.push(`${memberCount} in room`);
+  }
+
+  if (hasActiveSession()) {
+    const trackLabel = truncateChannelStatusSegment(currentTrack?.title || currentTrack?.name, 36);
+    if (trackLabel) {
+      statusSegments.push(trackLabel);
+    }
+  }
+
+  const nextName = `${baseName} | ${statusSegments.join(" | ")}`;
+  return nextName.length <= 100
+    ? nextName
+    : truncateChannelStatusSegment(nextName, 100);
+}
+
+async function updateTrackedVoiceChannelStatus(guild, voiceChannel, memberCount, currentTrack) {
+  if (!voiceChannel?.manageable) {
+    return;
+  }
+
+  const nextName = buildTrackedVoiceChannelName(voiceChannel, memberCount, currentTrack);
+  if (voiceChannel.name === nextName) {
+    return;
+  }
+
+  try {
+    await voiceChannel.setName(nextName, "Sync private lounge tracker");
+  } catch (error) {
+    console.error("Failed to update tracked voice channel name:", error);
+  }
 }
 
 async function getStatusTextChannel(guild) {
-  if (!GENERAL_CHANNEL_ID) {
-    console.log("GENERAL_CHANNEL_ID missing, skipping lounge status update.");
+  const trackedChannelId = getTrackedLoungeChannelId();
+  if (!trackedChannelId) {
     return null;
   }
 
-  const channel = await guild.channels.fetch(GENERAL_CHANNEL_ID).catch(() => null);
-  if (!channel) {
-    console.log("General channel unavailable for lounge status update.");
-    return null;
-  }
-
-  if (!channel.isTextBased()) {
-    console.log("GENERAL_CHANNEL_ID is not a text channel.");
+  const channel = await guild.channels.fetch(trackedChannelId).catch(() => null);
+  if (!channel || !channel.isTextBased()) {
     return null;
   }
 
@@ -820,9 +877,13 @@ async function updateLoungeStatusMessage(guild, recentActivity = null) {
     .filter((member) => !member.user.bot)
     .map((member) => member.displayName || member.user.username)
     .sort((a, b) => a.localeCompare(b));
+  const loungeName = getTrackedChannelBaseName(loungeChannel);
   const currentTrack = getCurrentTrack();
+
+  await updateTrackedVoiceChannelStatus(guild, loungeChannel, memberNames.length, currentTrack);
+
   const embed = new EmbedBuilder()
-    .setTitle("Casual Loungin'")
+    .setTitle(loungeName)
     .setColor(memberNames.length ? 0x57f287 : 0x747f8d)
     .addFields(
       {
@@ -868,7 +929,7 @@ async function announceLoungePresenceTransition(guild, transition) {
       guild,
       buildMilestoneEmbed({
         title: "Lounge Active",
-        description: `**${transition.memberName}** just lit up Casual Loungin'.`,
+        description: `**${transition.memberName}** just lit up hardcore loungin.`,
         color: 0x57f287,
         footer: transition.headcount === 1 ? "The room is open" : `${transition.headcount} people in the room`,
       })
@@ -881,7 +942,7 @@ async function announceLoungePresenceTransition(guild, transition) {
       guild,
       buildMilestoneEmbed({
         title: "Lounge Empty",
-        description: `**${transition.memberName}** was the last one out of Casual Loungin'.`,
+        description: `**${transition.memberName}** was the last one out of hardcore loungin.`,
         color: 0x747f8d,
         footer: "The room went quiet",
       })
@@ -1421,7 +1482,7 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
       console.log(`${displayName} joined ${voiceChannel.name}`);
       await updateLoungeStatusMessage(
         newState.guild,
-        `${displayName} joined Casual Loungin'`
+        `${displayName} joined hardcore loungin`
       );
       if (joinedLounge && postChangeHeadcount === 1) {
         await announceLoungePresenceTransition(newState.guild, {
@@ -1440,7 +1501,7 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
       console.log(`${displayName} left ${voiceChannel.name}`);
       await updateLoungeStatusMessage(
         oldState.guild,
-        `${displayName} left Casual Loungin'`
+        `${displayName} left hardcore loungin`
       );
       if (leftLounge && postChangeHeadcount === 0) {
         await announceLoungePresenceTransition(oldState.guild, {
@@ -1462,8 +1523,8 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
 
       const activity =
         newChannel?.id === trackedChannelId
-          ? `${displayName} joined Casual Loungin'`
-          : `${displayName} left Casual Loungin'`;
+          ? `${displayName} joined hardcore loungin`
+          : `${displayName} left hardcore loungin`;
 
       await updateLoungeStatusMessage(newState.guild, activity);
       if (movedIntoLounge && postChangeHeadcount === 1) {
