@@ -6,3 +6,5 @@ node_modules
 .env.*
 .steam-links.json
 .steam-status.json
+.spotify-accounts.json
+.bot.lock

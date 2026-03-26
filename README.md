@@ -1,112 +1,95 @@
-# Melo Lounge Bot
+# Spotify Player Bot
 
-Melo Lounge Bot is a custom Discord bot built for a music-first community server.
+This bot is now a Spotify-first Discord controller.
 
-It handles lounge radio playback, library browsing, YouTube track importing, and lightweight voice presence features designed to make a server feel active without turning every event into channel spam.
+It connects to one Spotify account, reads that account's playlists, and lets Discord users start or control playback on that Spotify account's active Spotify Connect device.
 
 ## What It Does
 
-- plays a curated lounge library in voice channels
-- lets members browse the library from Discord with an embed and dropdown UI
-- imports tracks from YouTube with `!addtrack`
-- keeps a single live lounge status message instead of posting repeated join/leave messages
-- supports optional GitHub sync for restoring the library after redeploys
+- connects to your Spotify account with a refresh token
+- lists your playlists in Discord
+- starts one of your playlists on your Spotify device
+- controls playback with pause, resume, next, previous, and volume commands
+- stores a preferred Spotify device id locally for easier playback routing
+- keeps a local account store ready for future per-user Spotify linking
 
-## Current Features
+## Important Constraint
 
-- `!start` starts radio playback in the caller's current voice channel
-- `!stop` stops playback and disconnects the bot
-- `!skip` skips the current track
-- `!track` shows the current track
-- `!library` opens a paginated library view with track selection
-- `!addtrack <youtube-url>` downloads and adds a new track to the library
+This bot does not stream Spotify audio into Discord voice channels.
 
-## Project Goals
+Spotify's API supports remote playback control on Spotify devices tied to the authenticated Spotify account, not arbitrary Discord voice streaming. So the bot acts as a Spotify controller for your account.
 
-This project is part Discord bot, part community tooling sandbox.
+## Commands
 
-The focus is simple:
+- `!playlists [page]`
+- `!play <number|playlist name>`
+- `!spotify`
+- `!pause`
+- `!resume`
+- `!next`
+- `!previous`
+- `!devices`
+- `!setdevice <name|id>`
+- `!volume <0-100>`
+- `!spotifyaccount`
+- `!linkspotify`
 
-- make the server feel alive
-- keep the music experience central
-- add personality without over-automating the community
+`!linkspotify` is a placeholder command for the future multi-account flow.
 
-## Tech Stack
+## Environment
 
-- Node.js
-- `discord.js`
-- `@discordjs/voice`
-- `yt-dlp`
-- `ffmpeg`
+Required:
+
+- `DISCORD_TOKEN`
+- `SPOTIFY_CLIENT_ID`
+- `SPOTIFY_CLIENT_SECRET`
+- `SPOTIFY_REFRESH_TOKEN`
+
+Optional:
+
+- `SPOTIFY_DEVICE_ID`
+
+## Spotify Setup
+
+You need a Spotify app plus a user refresh token with playback scopes for the owner account.
+
+At minimum, the token should cover:
+
+- `user-read-playback-state`
+- `user-modify-playback-state`
+- `playlist-read-private`
+- `playlist-read-collaborative`
+- `user-read-currently-playing`
+
+The account should have an active Spotify Connect device available when you start playback.
 
 ## Local Run
-
-Install dependencies:
 
 ```bash
 npm install
 ```
 
-Start the bot:
-
 ```bash
 node index.js
 ```
 
-For local development:
+For development:
 
 ```bash
 npm run dev
 ```
 
-## Environment
+## Local Storage
 
-At minimum, the bot expects:
+The bot writes `.spotify-accounts.json` in the repo root.
 
-- `DISCORD_TOKEN`
-- `GENERAL_CHANNEL_ID`
-- `LOUNGE_VOICE_CHANNEL_ID`
-- `PRIVATE_VOICE_CHANNEL_ID`
-- `LOG_CHANNEL_ID`
+Right now it stores the preferred owner playback device. The same file is structured to support linked Discord user Spotify accounts later.
 
-Optional YouTube import support:
+## Next Phase
 
-- `YT_DLP_COOKIES_B64`
-- `YT_DLP_USER_AGENT`
-- `YT_DLP_PATH`
+The codebase now has a clean base for:
 
-Optional GitHub library persistence:
-
-- `GITHUB_SYNC_TOKEN`
-- `GITHUB_SYNC_REPO`
-- `GITHUB_SYNC_BRANCH`
-- `GITHUB_SYNC_FILE_PATH`
-
-## Deployment Notes
-
-The repo uses a `postinstall` step to download a project-local `yt-dlp` binary into `.runtime/bin/` when needed.
-
-Recommended deploy commands:
-
-```bash
-npm install
-```
-
-```bash
-node index.js
-```
-
-If GitHub sync is configured, successful `!addtrack` imports can be written back to the repo and restored on startup.
-
-## Status
-
-This bot is active development software. The current direction is:
-
-- cleaner Discord-native UI
-- better music library flow
-- stronger persistence and admin visibility
-- eventual expansion into a companion website
-
-## License
-
-Private project unless otherwise stated.
+- Discord user to Spotify account linking
+- user-specific playlist browsing
+- permissions around who can control the owner account
+- a future web companion for OAuth and account management
