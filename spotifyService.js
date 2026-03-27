@@ -14,6 +14,30 @@ function requireEnv(name) {
   return value.trim();
 }
 
+function buildSpotifyError(error, fallbackMessage) {
+  const status = error.response?.status;
+  const data = error.response?.data;
+
+  const normalizedMessage =
+    data?.error_description ||
+    data?.error?.message ||
+    (typeof data?.error === "string" ? data.error : null) ||
+    error.message ||
+    fallbackMessage;
+
+  const details = [];
+  if (status) {
+    details.push(`status ${status}`);
+  }
+
+  if (data?.error && typeof data.error === "string" && data.error !== normalizedMessage) {
+    details.push(data.error);
+  }
+
+  const detailSuffix = details.length ? ` (${details.join(", ")})` : "";
+  return new Error(`${normalizedMessage}${detailSuffix}`);
+}
+
 async function getAccessToken() {
   if (cachedAccessToken && Date.now() < cachedAccessTokenExpiresAt - 30_000) {
     return cachedAccessToken;
@@ -29,16 +53,25 @@ async function getAccessToken() {
     refresh_token: refreshToken,
   });
 
-  const response = await axios.post(
-    `${SPOTIFY_ACCOUNTS_BASE_URL}/api/token`,
-    params.toString(),
-    {
-      headers: {
-        Authorization: `Basic ${credentials}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-    }
-  );
+  let response;
+  try {
+    response = await axios.post(
+      `${SPOTIFY_ACCOUNTS_BASE_URL}/api/token`,
+      params.toString(),
+      {
+        headers: {
+          Authorization: `Basic ${credentials}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      }
+    );
+  } catch (error) {
+    throw buildSpotifyError(error, "Spotify token refresh failed");
+  }
+
+  if (!response.data?.access_token) {
+    throw new Error("Spotify token refresh succeeded but no access token was returned");
+  }
 
   cachedAccessToken = response.data.access_token;
   cachedAccessTokenExpiresAt = Date.now() + (response.data.expires_in || 3600) * 1000;
@@ -61,9 +94,7 @@ async function spotifyRequest(config) {
 
     return response.data;
   } catch (error) {
-    const spotifyMessage = error.response?.data?.error?.message;
-    const message = spotifyMessage || error.message || "Spotify API request failed";
-    throw new Error(message);
+    throw buildSpotifyError(error, "Spotify API request failed");
   }
 }
 
@@ -176,8 +207,7 @@ async function getCurrentPlayback() {
         : null,
     };
   } catch (error) {
-    const spotifyMessage = error.response?.data?.error?.message;
-    throw new Error(spotifyMessage || error.message || "Spotify playback lookup failed");
+    throw buildSpotifyError(error, "Spotify playback lookup failed");
   }
 }
 
