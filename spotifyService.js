@@ -109,6 +109,18 @@ function normalizePlaylist(playlist) {
   };
 }
 
+function normalizePlaylistTrack(track) {
+  return {
+    id: track.id || null,
+    name: track.name || "Unknown track",
+    artists: Array.isArray(track.artists)
+      ? track.artists.map((artist) => artist.name).filter(Boolean)
+      : [],
+    durationMs: track.duration_ms || null,
+    externalUrl: track.external_urls?.spotify || null,
+  };
+}
+
 async function getCurrentSpotifyProfile() {
   const profile = await spotifyRequest({
     method: "get",
@@ -283,14 +295,36 @@ async function getPlaylistTracks(playlistId) {
   const limit = 100;
 
   while (true) {
-    const data = await spotifyRequest({
-      method: "get",
-      url: `/playlists/${playlistId}/tracks`,
-      params: {
-        limit,
-        offset,
-      },
-    });
+    let data;
+    try {
+      data = await spotifyRequest({
+        method: "get",
+        url: `/playlists/${playlistId}/tracks`,
+        params: {
+          limit,
+          offset,
+        },
+      });
+    } catch (error) {
+      const isFirstPageForbidden = offset === 0 && /\bstatus 403\b/i.test(error.message);
+      if (!isFirstPageForbidden) {
+        throw error;
+      }
+
+      const playlist = await spotifyRequest({
+        method: "get",
+        url: `/playlists/${playlistId}`,
+        params: {
+          fields: "tracks.items(track(id,name,duration_ms,artists(name),external_urls.spotify)),tracks.total",
+        },
+      });
+
+      const playlistItems = Array.isArray(playlist.tracks?.items) ? playlist.tracks.items : [];
+      return playlistItems
+        .map((item) => item?.track)
+        .filter((track) => track && track.type !== "episode")
+        .map(normalizePlaylistTrack);
+    }
 
     const pageItems = Array.isArray(data.items) ? data.items : [];
 
@@ -298,15 +332,7 @@ async function getPlaylistTracks(playlistId) {
       ...pageItems
         .map((item) => item?.track)
         .filter((track) => track && track.type === "track")
-        .map((track) => ({
-          id: track.id || null,
-          name: track.name || "Unknown track",
-          artists: Array.isArray(track.artists)
-            ? track.artists.map((artist) => artist.name).filter(Boolean)
-            : [],
-          durationMs: track.duration_ms || null,
-          externalUrl: track.external_urls?.spotify || null,
-        }))
+        .map(normalizePlaylistTrack)
     );
 
     if (!data.next || pageItems.length < limit) {
