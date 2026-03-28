@@ -272,11 +272,59 @@ async function setPlaybackVolume({ volumePercent, deviceId = null }) {
   });
 }
 
+
+async function getPlaylistTracks(playlistId) {
+  if (!playlistId) {
+    throw new Error("playlistId is required");
+  }
+
+  const collected = [];
+  let offset = 0;
+  const limit = 100;
+
+  while (true) {
+    const data = await spotifyRequest({
+      method: "get",
+      url: `/playlists/${playlistId}/tracks`,
+      params: {
+        limit,
+        offset,
+        market: "from_token",
+      },
+    });
+
+    const pageItems = Array.isArray(data.items) ? data.items : [];
+
+    collected.push(
+      ...pageItems
+        .map((item) => item?.track)
+        .filter((track) => track && track.type === "track")
+        .map((track) => ({
+          id: track.id || null,
+          name: track.name || "Unknown track",
+          artists: Array.isArray(track.artists)
+            ? track.artists.map((artist) => artist.name).filter(Boolean)
+            : [],
+          durationMs: track.duration_ms || null,
+          externalUrl: track.external_urls?.spotify || null,
+        }))
+    );
+
+    if (!data.next || pageItems.length < limit) {
+      break;
+    }
+
+    offset += limit;
+  }
+
+  return collected;
+}
 module.exports = {
   getCurrentSpotifyProfile,
   getCurrentPlayback,
   getDevices,
   getOwnedPlaylists,
+  getPlaylistTracks,
   startPlaylistPlayback,
   pausePlayback,
   resumePlayback,

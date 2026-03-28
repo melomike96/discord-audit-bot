@@ -1,52 +1,104 @@
-const axios = require("axios");
+const { spawn } = require("child_process");
+const path = require("path");
+const { resolveCommand } = require("./audio/library/resolveCommand");
 
-function normalizeTrackTitle(title) {
-  return String(title || "")
-    .replace(/\s*\([^)]*official[^)]*\)/gi, "")
-    .replace(/\s*\([^)]*lyrics?[^)]*\)/gi, "")
-    .replace(/\s*\[[^\]]*lyrics?[^\]]*\]/gi, "")
+const PROJECT_ROOT = __dirname;
+const LOCAL_YT_DLP_CANDIDATES = [
+  path.join(PROJECT_ROOT, ".runtime", "bin", process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp"),
+  path.join(PROJECT_ROOT, ".render", "bin", "yt-dlp"),
+];
+
+function getYtDlpCommand() {
+  const command = resolveCommand(["yt-dlp"], {
+    envVar: "YT_DLP_PATH",
+    paths: LOCAL_YT_DLP_CANDIDATES,
+  });
+
+  if (!command) {
+    throw new Error("yt-dlp is not installed. Install it and set YT_DLP_PATH if needed.");
+  }
+
+  return command;
+}
+
+function runCommand(command, args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString("utf8");
+    });
+
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString("utf8");
+    });
+
+    child.on("error", (error) => {
+      reject(error);
+    });
+
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve(stdout.trim());
+        return;
+      }
+
+      reject(new Error(stderr.trim() || `Command failed with exit code ${code}`));
+    });
+  });
+}
+
+function safeTrackText(value) {
+  return String(value || "")
+    .replace(/[\n\r\t]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-async function addTrackFromYoutube({ url, addedBy }) {
-  const oEmbedUrl = "https://www.youtube.com/oembed";
+async function resolveYoutubeTrackForSpotifyTrack(track) {
+  const artists = Array.isArray(track.artists) ? track.artists.join(" ") : "";
+  const query = `${safeTrackText(track.name)} ${safeTrackText(artists)} audio`;
+  const ytDlpCommand = getYtDlpCommand();
 
-  let response;
-  try {
-    response = await axios.get(oEmbedUrl, {
-      params: {
-        url,
-        format: "json",
-      },
-      timeout: 10000,
-    });
-  } catch (error) {
-    if (error.response?.status === 404) {
-      throw new Error("That YouTube link could not be found. Please confirm the URL and try again.");
-    }
+  const result = await runCommand(ytDlpCommand, [
+    "--default-search",
+    "ytsearch1",
+    "--print",
+    "%(webpage_url)s\t%(title)s",
+    query,
+  ]);
 
-    throw new Error(
-      "I couldn't fetch track details from YouTube right now. Please try again in a moment."
-    );
+  const firstLine = result.split(/\r?\n/).find(Boolean);
+  if (!firstLine) {
+    throw new Error(`No YouTube result found for ${track.name}`);
   }
 
-  const rawTitle = response.data?.title;
-  if (!rawTitle) {
-    throw new Error("I found the link, but couldn't read a track title from YouTube.");
+  const [youtubeUrl, youtubeTitle] = firstLine.split("\t");
+
+  if (!youtubeUrl || !youtubeUrl.startsWith("http")) {
+    throw new Error(`Could not parse YouTube URL for ${track.name}`);
   }
 
-  const normalizedTitle = normalizeTrackTitle(rawTitle);
+  const streamUrl = await runCommand(ytDlpCommand, ["-f", "bestaudio/best", "-g", youtubeUrl]);
+  const firstStreamUrl = streamUrl.split(/\r?\n/).find(Boolean);
 
-  // Placeholder: metadata is resolved now so the bot can confirm submission.
-  // A download/transcode pipeline can be added here later.
+  if (!firstStreamUrl || !firstStreamUrl.startsWith("http")) {
+    throw new Error(`Could not resolve audio stream for ${track.name}`);
+  }
+
   return {
-    normalizedTitle,
-    queued: true,
-    addedBy,
+    youtubeUrl,
+    youtubeTitle: youtubeTitle || track.name,
+    streamUrl: firstStreamUrl,
+    displayTitle: `${track.name} - ${artists || "Unknown artist"}`,
   };
 }
 
 module.exports = {
-  addTrackFromYoutube,
+  resolveYoutubeTrackForSpotifyTrack,
 };

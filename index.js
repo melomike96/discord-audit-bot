@@ -14,12 +14,16 @@ const {
   skipToNextTrack,
   skipToPreviousTrack,
   setPlaybackVolume,
+  getPlaylistTracks,
 } = require("./spotifyService");
 const {
   getStore,
   getPreferredDeviceId,
   setPreferredDeviceId,
 } = require("./spotifyAccountStore");
+const { resolveYoutubeTrackForSpotifyTrack } = require("./youtubeService");
+const { enqueueTracks, getNowPlaying, skipTrack, stopPlayback } = require("./discordPlaybackService");
+const { addTrackFromUrl, AddTrackError } = require("./audio/library/addTrackService");
 
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const LOCK_PATH = path.join(__dirname, ".bot.lock");
@@ -302,11 +306,102 @@ async function handleVolumeCommand(message, rawInput) {
   await message.reply(`Spotify volume set to **${volume}%**.`);
 }
 
+async function resolveSpotifyPlaylistSelection(rawInput, message) {
+  let playlists = getCachedPlaylists(message);
+  if (!playlists.length) {
+    playlists = await getOwnedPlaylists();
+    cachePlaylists(message, playlists);
+  }
+
+  return findPlaylistFromInput(rawInput, playlists);
+}
+
+async function handleDiscordPlayCommand(message, rawInput) {
+  if (!rawInput) {
+    await message.reply("Provide a playlist name or number from `!playlists`. Example: `!discordplay 1`");
+    return;
+  }
+
+  const voiceChannel = message.member?.voice?.channel;
+  if (!voiceChannel) {
+    await message.reply("Join a voice channel first, then run `!discordplay <playlist>`.");
+    return;
+  }
+
+  const playlist = await resolveSpotifyPlaylistSelection(rawInput, message);
+  if (!playlist) {
+    await message.reply("I couldn't match that Spotify playlist.");
+    return;
+  }
+
+  await message.reply(`Resolving YouTube audio for **${playlist.name}**. This may take a moment...`);
+
+  const tracks = await getPlaylistTracks(playlist.id);
+  if (!tracks.length) {
+    await message.reply("That Spotify playlist has no playable tracks.");
+    return;
+  }
+
+  const maxTracks = Math.min(tracks.length, Number.parseInt(process.env.DISCORD_PLAYLIST_TRACK_LIMIT || "20", 10) || 20);
+  const selectedTracks = tracks.slice(0, maxTracks);
+
+  const resolved = [];
+  for (const track of selectedTracks) {
+    try {
+      const youtubeMatch = await resolveYoutubeTrackForSpotifyTrack(track);
+      resolved.push({
+        ...youtubeMatch,
+        spotifyTrack: track,
+      });
+    } catch (error) {
+      console.warn(`Failed to resolve YouTube audio for ${track.name}:`, error.message);
+    }
+  }
+
+  if (!resolved.length) {
+    await message.reply("I couldn't resolve any YouTube sources for that playlist right now.");
+    return;
+  }
+
+  const queueResult = await enqueueTracks({
+    guild: message.guild,
+    voiceChannel,
+    textChannel: message.channel,
+    tracks: resolved,
+  });
+
+  await message.reply(`Queued **${queueResult.queued}** track(s) from **${playlist.name}** for native Discord playback.`);
+}
+
+async function handleAddMusicCommand(message, rawInput) {
+  if (!rawInput) {
+    await message.reply("Provide a YouTube URL. Example: `!addmusic https://www.youtube.com/watch?v=...`");
+    return;
+  }
+
+  try {
+    const added = await addTrackFromUrl(rawInput, { requestedBy: message.author.tag });
+    await message.reply(`Added **${added.title}** to the shared repo library.\n${added.canonicalUrl}`);
+  } catch (error) {
+    if (error instanceof AddTrackError) {
+      await message.reply(error.userMessage || "Failed to add this track to the library.");
+      return;
+    }
+
+    throw error;
+  }
+}
+
 function buildHelpMessage() {
   return [
-    "**Spotify Player Commands**",
+    "**Spotify + Discord Audio Commands**",
     "`!playlists [page]` - list playlists from the connected Spotify account",
-    "`!play <number|playlist name>` - start one of those playlists on Spotify",
+    "`!play <number|playlist name>` - start one of those playlists on Spotify Connect",
+    "`!discordplay <number|playlist name>` - play playlist audio natively in your Discord voice channel using YouTube",
+    "`!skip` - skip the currently playing Discord voice track",
+    "`!stop` - stop Discord voice playback and clear queue",
+    "`!nowplaying` - show current Spotify track or active Discord voice track",
+    "`!addmusic <youtube url>` - download and add a YouTube track to the shared repo library",
     "`!spotify` - show current Spotify playback",
     "`!pause` - pause Spotify playback",
     "`!resume` - resume Spotify playback",
@@ -406,7 +501,57 @@ client.on("messageCreate", async (message) => {
       return;
     }
 
-    if (/^!spotify$/i.test(content) || /^!nowplaying$/i.test(content)) {
+    if (/^!discordplay\b/i.test(content)) {
+      await handleDiscordPlayCommand(message, parseCommand(content, "discordplay"));
+      return;
+    }
+
+    if (/^!addmusic\b/i.test(content)) {
+      await handleAddMusicCommand(message, parseCommand(content, "addmusic"));
+      return;
+    }
+
+    if (/^!skip$/i.test(content)) {
+      const skipped = skipTrack(message.guild.id);
+      await message.reply(skipped ? "Skipped current Discord voice track." : "No Discord voice track is active.");
+      return;
+    }
+
+    if (/^!stop$/i.test(content)) {
+      const stopped = stopPlayback(message.guild.id);
+      await message.reply(stopped ? "Stopped Discord voice playback and cleared queue." : "No Discord voice session is active.");
+      return;
+    }
+
+    if (/^!nowplaying$/i.test(content)) {
+      const discordNowPlaying = getNowPlaying(message.guild.id);
+      if (discordNowPlaying) {
+        await message.reply([`Discord now playing: **${discordNowPlaying.displayTitle}**`, discordNowPlaying.youtubeUrl].join("\n"));
+        return;
+      }
+
+      const playback = await getCurrentPlayback();
+      if (!playback.item) {
+        await message.reply("Nothing is playing right now (Spotify or Discord queue).");
+        return;
+      }
+
+      await message.reply(
+        [
+          `Spotify now playing: **${playback.item.name}**`,
+          playback.item.artists.length ? `Artist: ${playback.item.artists.join(", ")}` : null,
+          playback.contextName ? `Context: **${playback.contextName}**` : null,
+          `Status: ${playback.isPlaying ? "playing" : "paused"}`,
+          `Progress: ${formatDuration(playback.progressMs)} / ${formatDuration(playback.item.durationMs)}`,
+          playback.item.externalUrl || null,
+        ]
+          .filter(Boolean)
+          .join("\n")
+      );
+      return;
+    }
+
+    if (/^!spotify$/i.test(content)) {
       const playback = await getCurrentPlayback();
       if (!playback.item) {
         await message.reply("Spotify is not currently playing anything on the connected account.");
