@@ -289,7 +289,6 @@ async function getPlaylistTracks(playlistId) {
       params: {
         limit,
         offset,
-        market: "from_token",
       },
     });
 

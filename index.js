@@ -614,7 +614,9 @@ client.on("messageCreate", async (message) => {
     }
   } catch (error) {
     console.error("Command handling failed:", error);
-    await message.reply(`Spotify command failed: ${error.message}`).catch(() => {});
+    const isDiscordPlayCommand = /^!discordplay\b/i.test(message.content.trim());
+    const errorPrefix = isDiscordPlayCommand ? "Discord playback setup failed" : "Spotify command failed";
+    await message.reply(`${errorPrefix}: ${error.message}`).catch(() => {});
   }
 });
 
