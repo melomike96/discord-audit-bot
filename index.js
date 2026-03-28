@@ -374,6 +374,20 @@ async function handleDiscordPlayCommand(message, rawInput) {
   await message.reply(`Queued **${queueResult.queued}** track(s) from **${playlist.name}** for native Discord playback.`);
 }
 
+function classifyDiscordPlayError(error) {
+  const message = error?.message || "Unknown error";
+
+  if (/\bstatus 403\b/i.test(message)) {
+    return `Spotify playlist lookup failed: ${message}. If this playlist is private or collaborative, refresh the Spotify token with playlist-read-private and playlist-read-collaborative scopes.`;
+  }
+
+  if (/yt-dlp|youtube|stream/i.test(message)) {
+    return `YouTube resolution failed: ${message}`;
+  }
+
+  return `Discord playback setup failed: ${message}`;
+}
+
 async function handleAddMusicCommand(message, rawInput) {
   if (!rawInput) {
     await message.reply("Provide a YouTube URL. Example: `!addmusic https://www.youtube.com/watch?v=...`");
@@ -615,8 +629,10 @@ client.on("messageCreate", async (message) => {
   } catch (error) {
     console.error("Command handling failed:", error);
     const isDiscordPlayCommand = /^!discordplay\b/i.test(message.content.trim());
-    const errorPrefix = isDiscordPlayCommand ? "Discord playback setup failed" : "Spotify command failed";
-    await message.reply(`${errorPrefix}: ${error.message}`).catch(() => {});
+    const userMessage = isDiscordPlayCommand
+      ? classifyDiscordPlayError(error)
+      : `Spotify command failed: ${error.message}`;
+    await message.reply(userMessage).catch(() => {});
   }
 });
 
