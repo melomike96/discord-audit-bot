@@ -1,29 +1,24 @@
-# Spotify Player Bot
+# Spotify + YouTube Discord Audio Bot
 
-This bot is now a Spotify-first Discord controller.
-
-It connects to one Spotify account, reads that account's playlists, and lets Discord users start or control playback on that Spotify account's active Spotify Connect device.
+This bot now supports **native Discord voice playback** powered by Spotify playlist selection and YouTube audio sources.
 
 ## What It Does
 
-- connects to your Spotify account with a refresh token
-- lists your playlists in Discord
-- starts one of your playlists on your Spotify device
-- controls playback with pause, resume, next, previous, and volume commands
-- stores a preferred Spotify device id locally for easier playback routing
-- keeps a local account store ready for future per-user Spotify linking
-
-## Important Constraint
-
-This bot does not stream Spotify audio into Discord voice channels.
-
-Spotify's API supports remote playback control on Spotify devices tied to the authenticated Spotify account, not arbitrary Discord voice streaming. So the bot acts as a Spotify controller for your account.
+- Connects to one Spotify account and reads that account's playlists.
+- Keeps Spotify Connect controls (`!play`, `!pause`, etc.) for remote Spotify playback.
+- Plays playlist audio natively in Discord voice using `!discordplay`:
+  - reads tracks from a Spotify playlist
+  - resolves each track to YouTube with `yt-dlp`
+  - streams audio into Discord voice
+- Lets users add YouTube tracks to the shared repo library with `!addmusic <youtube-url>`.
 
 ## Commands
 
 - `!playlists [page]`
-- `!play <number|playlist name>`
+- `!play <number|playlist name>` (Spotify Connect playback)
+- `!discordplay <number|playlist name>` (Discord voice playback)
 - `!spotify`
+- `!nowplaying`
 - `!pause`
 - `!resume`
 - `!next`
@@ -31,10 +26,11 @@ Spotify's API supports remote playback control on Spotify devices tied to the au
 - `!devices`
 - `!setdevice <name|id>`
 - `!volume <0-100>`
+- `!skip` (skip Discord voice track)
+- `!stop` (stop Discord voice queue)
+- `!addmusic <youtube-url>` (add to shared library repo)
 - `!spotifyaccount`
 - `!linkspotify`
-
-`!linkspotify` is a placeholder command for the future multi-account flow.
 
 ## Environment
 
@@ -48,48 +44,13 @@ Required:
 Optional:
 
 - `SPOTIFY_DEVICE_ID`
+- `DISCORD_PLAYLIST_TRACK_LIMIT` (default `20`)
+- `YT_DLP_PATH` (custom yt-dlp binary path)
 
-## Spotify Setup
+For shared-library GitHub sync in `!addmusic`, existing optional sync vars still apply (`GITHUB_SYNC_*`).
 
-You need a Spotify app plus a user refresh token with playback scopes for the owner account.
+## Notes
 
-At minimum, the token should cover:
-
-- `user-read-playback-state`
-- `user-modify-playback-state`
-- `playlist-read-private`
-- `playlist-read-collaborative`
-- `user-read-currently-playing`
-
-The account should have an active Spotify Connect device available when you start playback.
-
-## Local Run
-
-```bash
-npm install
-```
-
-```bash
-node index.js
-```
-
-For development:
-
-```bash
-npm run dev
-```
-
-## Local Storage
-
-The bot writes `.spotify-accounts.json` in the repo root.
-
-Right now it stores the preferred owner playback device. The same file is structured to support linked Discord user Spotify accounts later.
-
-## Next Phase
-
-The codebase now has a clean base for:
-
-- Discord user to Spotify account linking
-- user-specific playlist browsing
-- permissions around who can control the owner account
-- a future web companion for OAuth and account management
+- Spotify audio is **not** directly streamed (Spotify API does not provide raw audio streaming for Discord bots).
+- Native Discord playback is sourced from YouTube matches for Spotify track metadata.
+- Best results require a working `yt-dlp` binary and ffmpeg (provided by `ffmpeg-static`).
