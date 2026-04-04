@@ -27,6 +27,7 @@ const { addTrackFromUrl, AddTrackError } = require("./audio/library/addTrackServ
 
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const LOCK_PATH = path.join(__dirname, ".bot.lock");
+const COMMAND_HISTORY_PATH = path.join(__dirname, ".command-history.json");
 const PLAYLIST_PAGE_SIZE = 10;
 
 const client = new Client({
@@ -39,6 +40,69 @@ const client = new Client({
 });
 
 const playlistSelectionCache = new Map();
+
+function readCommandHistory() {
+  try {
+    if (!fs.existsSync(COMMAND_HISTORY_PATH)) {
+      return [];
+    }
+
+    const parsed = JSON.parse(fs.readFileSync(COMMAND_HISTORY_PATH, "utf8"));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.error("Failed to read command history:", error);
+    return [];
+  }
+}
+
+function writeCommandHistory(history) {
+  try {
+    fs.writeFileSync(COMMAND_HISTORY_PATH, JSON.stringify(history, null, 2));
+  } catch (error) {
+    console.error("Failed to save command history:", error);
+  }
+}
+
+function appendCommandHistory(entry) {
+  const history = readCommandHistory();
+  history.push({
+    ...entry,
+    createdAt: new Date().toISOString(),
+  });
+  const maxEntries = Number.parseInt(process.env.COMMAND_HISTORY_LIMIT || "500", 10) || 500;
+  writeCommandHistory(history.slice(-maxEntries));
+}
+
+async function resolveReplyTarget(message) {
+  if (!message.reference?.messageId) {
+    return message.id;
+  }
+
+  try {
+    const originalMessage = await message.fetchReference();
+    return originalMessage.id;
+  } catch (error) {
+    console.warn("Failed to fetch original message reference, replying to command message instead:", error.message);
+    return message.id;
+  }
+}
+
+async function sendReply(message, content) {
+  const messageReference = await resolveReplyTarget(message);
+
+  try {
+    return await message.channel.send({
+      content,
+      reply: {
+        messageReference,
+        failIfNotExists: false,
+      },
+    });
+  } catch (error) {
+    console.warn("Reply by message reference failed; falling back to direct channel send:", error.message);
+    return message.channel.send({ content });
+  }
+}
 
 function isProcessRunning(pid) {
   try {
@@ -150,7 +214,7 @@ async function replyWithPlaylists(message, pageNumber = 1) {
   cachePlaylists(message, playlists);
 
   if (!playlists.length) {
-    await message.reply("No playlists were found on the connected Spotify account.");
+    await sendReply(message, "No playlists were found on the connected Spotify account.");
     return;
   }
 
@@ -160,7 +224,8 @@ async function replyWithPlaylists(message, pageNumber = 1) {
   const start = (page - 1) * PLAYLIST_PAGE_SIZE;
   const pageItems = playlists.slice(start, start + PLAYLIST_PAGE_SIZE);
 
-  await message.reply(
+  await sendReply(
+    message,
     [
       `**Spotify Playlists**`,
       `Page ${page} of ${totalPages}`,
@@ -207,7 +272,7 @@ function parseCommand(content, commandName) {
 
 async function handlePlayCommand(message, rawInput) {
   if (!rawInput) {
-    await message.reply("Provide a playlist name or a playlist number from `!playlists`.");
+    await sendReply(message, "Provide a playlist name or a playlist number from `!playlists`.");
     return;
   }
 
@@ -219,7 +284,7 @@ async function handlePlayCommand(message, rawInput) {
 
   const playlist = findPlaylistFromInput(rawInput, playlists);
   if (!playlist) {
-    await message.reply("I couldn't find that playlist on the connected Spotify account.");
+    await sendReply(message, "I couldn't find that playlist on the connected Spotify account.");
     return;
   }
 
@@ -229,7 +294,8 @@ async function handlePlayCommand(message, rawInput) {
     deviceId,
   });
 
-  await message.reply(
+  await sendReply(
+    message,
     [
       `Starting **${playlist.name}** on Spotify.`,
       playlist.externalUrl ? playlist.externalUrl : null,
@@ -246,14 +312,16 @@ async function handleDevicesCommand(message) {
   const devices = await getDevices();
 
   if (!devices.length) {
-    await message.reply(
+    await sendReply(
+      message,
       "Spotify returned no available devices. Open Spotify on the target device first so the account has an active Connect target."
     );
     return;
   }
 
   const preferredDeviceId = getPreferredDeviceId();
-  await message.reply(
+  await sendReply(
+    message,
     [
       "**Spotify Devices**",
       ...devices.map((device, index) => {
@@ -268,13 +336,13 @@ async function handleDevicesCommand(message) {
 
 async function handleSetDeviceCommand(message, rawInput) {
   if (!rawInput) {
-    await message.reply("Provide a Spotify device name or device id. Use `!devices` to inspect available devices.");
+    await sendReply(message, "Provide a Spotify device name or device id. Use `!devices` to inspect available devices.");
     return;
   }
 
   const devices = await getDevices();
   if (!devices.length) {
-    await message.reply("No Spotify devices are available right now.");
+    await sendReply(message, "No Spotify devices are available right now.");
     return;
   }
 
@@ -285,18 +353,18 @@ async function handleSetDeviceCommand(message, rawInput) {
     devices.find((device) => device.name.toLowerCase().includes(lowered));
 
   if (!selected) {
-    await message.reply("I couldn't match that to a Spotify device.");
+    await sendReply(message, "I couldn't match that to a Spotify device.");
     return;
   }
 
   setPreferredDeviceId(selected.id);
-  await message.reply(`Preferred Spotify device set to **${selected.name}** (\`${selected.id}\`).`);
+  await sendReply(message, `Preferred Spotify device set to **${selected.name}** (\`${selected.id}\`).`);
 }
 
 async function handleVolumeCommand(message, rawInput) {
   const volume = Number.parseInt(rawInput || "", 10);
   if (!Number.isInteger(volume) || volume < 0 || volume > 100) {
-    await message.reply("Provide a volume from 0 to 100. Example: `!volume 65`");
+    await sendReply(message, "Provide a volume from 0 to 100. Example: `!volume 65`");
     return;
   }
 
@@ -304,7 +372,7 @@ async function handleVolumeCommand(message, rawInput) {
     volumePercent: volume,
     deviceId: getRequestedDeviceId(),
   });
-  await message.reply(`Spotify volume set to **${volume}%**.`);
+  await sendReply(message, `Spotify volume set to **${volume}%**.`);
 }
 
 async function resolveSpotifyPlaylistSelection(rawInput, message) {
@@ -319,27 +387,27 @@ async function resolveSpotifyPlaylistSelection(rawInput, message) {
 
 async function handleDiscordPlayCommand(message, rawInput) {
   if (!rawInput) {
-    await message.reply("Provide a playlist name or number from `!playlists`. Example: `!discordplay 1`");
+    await sendReply(message, "Provide a playlist name or number from `!playlists`. Example: `!discordplay 1`");
     return;
   }
 
   const voiceChannel = message.member?.voice?.channel;
   if (!voiceChannel) {
-    await message.reply("Join a voice channel first, then run `!discordplay <playlist>`.");
+    await sendReply(message, "Join a voice channel first, then run `!discordplay <playlist>`.");
     return;
   }
 
   const playlist = await resolveSpotifyPlaylistSelection(rawInput, message);
   if (!playlist) {
-    await message.reply("I couldn't match that Spotify playlist.");
+    await sendReply(message, "I couldn't match that Spotify playlist.");
     return;
   }
 
-  await message.reply(`Resolving YouTube audio for **${playlist.name}**. This may take a moment...`);
+  await sendReply(message, `Resolving YouTube audio for **${playlist.name}**. This may take a moment...`);
 
   const tracks = await getPlaylistTracks(playlist.id);
   if (!tracks.length) {
-    await message.reply("That Spotify playlist has no playable tracks.");
+    await sendReply(message, "That Spotify playlist has no playable tracks.");
     return;
   }
 
@@ -360,7 +428,7 @@ async function handleDiscordPlayCommand(message, rawInput) {
   }
 
   if (!resolved.length) {
-    await message.reply("I couldn't resolve any YouTube sources for that playlist right now.");
+    await sendReply(message, "I couldn't resolve any YouTube sources for that playlist right now.");
     return;
   }
 
@@ -371,7 +439,7 @@ async function handleDiscordPlayCommand(message, rawInput) {
     tracks: resolved,
   });
 
-  await message.reply(`Queued **${queueResult.queued}** track(s) from **${playlist.name}** for native Discord playback.`);
+  await sendReply(message, `Queued **${queueResult.queued}** track(s) from **${playlist.name}** for native Discord playback.`);
 }
 
 function classifyDiscordPlayError(error) {
@@ -390,16 +458,16 @@ function classifyDiscordPlayError(error) {
 
 async function handleAddMusicCommand(message, rawInput) {
   if (!rawInput) {
-    await message.reply("Provide a YouTube URL. Example: `!addmusic https://www.youtube.com/watch?v=...`");
+    await sendReply(message, "Provide a YouTube URL. Example: `!addmusic https://www.youtube.com/watch?v=...`");
     return;
   }
 
   try {
     const added = await addTrackFromUrl(rawInput, { requestedBy: message.author.tag });
-    await message.reply(`Added **${added.title}** to the shared repo library.\n${added.canonicalUrl}`);
+    await sendReply(message, `Added **${added.title}** to the shared repo library.\n${added.canonicalUrl}`);
   } catch (error) {
     if (error instanceof AddTrackError) {
-      await message.reply(error.userMessage || "Failed to add this track to the library.");
+      await sendReply(message, error.userMessage || "Failed to add this track to the library.");
       return;
     }
 
@@ -477,21 +545,37 @@ client.on("messageCreate", async (message) => {
     }
 
     if (/^!help$/i.test(content)) {
-      await message.reply(buildHelpMessage());
+      await sendReply(message, buildHelpMessage());
+      appendCommandHistory({
+        guildId: message.guild.id,
+        channelId: message.channel.id,
+        authorId: message.author.id,
+        command: content,
+        status: "ok",
+      });
       return;
     }
 
     if (/^!linkspotify$/i.test(content)) {
-      await message.reply(
+      await sendReply(
+        message,
         "Per-user Spotify linking is not enabled yet. The current bot controls one owner Spotify account, and the storage scaffold is in place for adding linked user accounts later."
       );
+      appendCommandHistory({
+        guildId: message.guild.id,
+        channelId: message.channel.id,
+        authorId: message.author.id,
+        command: content,
+        status: "ok",
+      });
       return;
     }
 
     if (/^!spotifyaccount$/i.test(content)) {
       const profile = await getCurrentSpotifyProfile();
       const preferredDeviceId = getPreferredDeviceId();
-      await message.reply(
+      await sendReply(
+        message,
         [
           `Connected Spotify account: **${profile.displayName || profile.id}**`,
           `Spotify user id: \`${profile.id}\``,
@@ -501,6 +585,13 @@ client.on("messageCreate", async (message) => {
           .filter(Boolean)
           .join("\n")
       );
+      appendCommandHistory({
+        guildId: message.guild.id,
+        channelId: message.channel.id,
+        authorId: message.author.id,
+        command: content,
+        status: "ok",
+      });
       return;
     }
 
@@ -508,50 +599,83 @@ client.on("messageCreate", async (message) => {
       const rawPage = parseCommand(content, "playlists");
       const pageNumber = rawPage ? Number.parseInt(rawPage, 10) : 1;
       await replyWithPlaylists(message, Number.isInteger(pageNumber) ? pageNumber : 1);
+      appendCommandHistory({
+        guildId: message.guild.id,
+        channelId: message.channel.id,
+        authorId: message.author.id,
+        command: content,
+        status: "ok",
+      });
       return;
     }
 
     if (/^!play\b/i.test(content)) {
       await handlePlayCommand(message, parseCommand(content, "play"));
+      appendCommandHistory({
+        guildId: message.guild.id,
+        channelId: message.channel.id,
+        authorId: message.author.id,
+        command: content,
+        status: "ok",
+      });
       return;
     }
 
     if (/^!discordplay\b/i.test(content)) {
       await handleDiscordPlayCommand(message, parseCommand(content, "discordplay"));
+      appendCommandHistory({
+        guildId: message.guild.id,
+        channelId: message.channel.id,
+        authorId: message.author.id,
+        command: content,
+        status: "ok",
+      });
       return;
     }
 
     if (/^!addmusic\b/i.test(content)) {
       await handleAddMusicCommand(message, parseCommand(content, "addmusic"));
+      appendCommandHistory({
+        guildId: message.guild.id,
+        channelId: message.channel.id,
+        authorId: message.author.id,
+        command: content,
+        status: "ok",
+      });
       return;
     }
 
     if (/^!skip$/i.test(content)) {
       const skipped = skipTrack(message.guild.id);
-      await message.reply(skipped ? "Skipped current Discord voice track." : "No Discord voice track is active.");
+      await sendReply(message, skipped ? "Skipped current Discord voice track." : "No Discord voice track is active.");
+      appendCommandHistory({ guildId: message.guild.id, channelId: message.channel.id, authorId: message.author.id, command: content, status: "ok" });
       return;
     }
 
     if (/^!stop$/i.test(content)) {
       const stopped = stopPlayback(message.guild.id);
-      await message.reply(stopped ? "Stopped Discord voice playback and cleared queue." : "No Discord voice session is active.");
+      await sendReply(message, stopped ? "Stopped Discord voice playback and cleared queue." : "No Discord voice session is active.");
+      appendCommandHistory({ guildId: message.guild.id, channelId: message.channel.id, authorId: message.author.id, command: content, status: "ok" });
       return;
     }
 
     if (/^!nowplaying$/i.test(content)) {
       const discordNowPlaying = getNowPlaying(message.guild.id);
       if (discordNowPlaying) {
-        await message.reply([`Discord now playing: **${discordNowPlaying.displayTitle}**`, discordNowPlaying.youtubeUrl].join("\n"));
+        await sendReply(message, [`Discord now playing: **${discordNowPlaying.displayTitle}**`, discordNowPlaying.youtubeUrl].join("\n"));
+        appendCommandHistory({ guildId: message.guild.id, channelId: message.channel.id, authorId: message.author.id, command: content, status: "ok" });
         return;
       }
 
       const playback = await getCurrentPlayback();
       if (!playback.item) {
-        await message.reply("Nothing is playing right now (Spotify or Discord queue).");
+        await sendReply(message, "Nothing is playing right now (Spotify or Discord queue).");
+        appendCommandHistory({ guildId: message.guild.id, channelId: message.channel.id, authorId: message.author.id, command: content, status: "ok" });
         return;
       }
 
-      await message.reply(
+      await sendReply(
+        message,
         [
           `Spotify now playing: **${playback.item.name}**`,
           playback.item.artists.length ? `Artist: ${playback.item.artists.join(", ")}` : null,
@@ -563,17 +687,20 @@ client.on("messageCreate", async (message) => {
           .filter(Boolean)
           .join("\n")
       );
+      appendCommandHistory({ guildId: message.guild.id, channelId: message.channel.id, authorId: message.author.id, command: content, status: "ok" });
       return;
     }
 
     if (/^!spotify$/i.test(content)) {
       const playback = await getCurrentPlayback();
       if (!playback.item) {
-        await message.reply("Spotify is not currently playing anything on the connected account.");
+        await sendReply(message, "Spotify is not currently playing anything on the connected account.");
+        appendCommandHistory({ guildId: message.guild.id, channelId: message.channel.id, authorId: message.author.id, command: content, status: "ok" });
         return;
       }
 
-      await message.reply(
+      await sendReply(
+        message,
         [
           `Now playing: **${playback.item.name}**`,
           playback.item.artists.length ? `Artist: ${playback.item.artists.join(", ")}` : null,
@@ -585,45 +712,53 @@ client.on("messageCreate", async (message) => {
           .filter(Boolean)
           .join("\n")
       );
+      appendCommandHistory({ guildId: message.guild.id, channelId: message.channel.id, authorId: message.author.id, command: content, status: "ok" });
       return;
     }
 
     if (/^!pause$/i.test(content)) {
       await pausePlayback({ deviceId: getRequestedDeviceId() });
-      await message.reply("Spotify playback paused.");
+      await sendReply(message, "Spotify playback paused.");
+      appendCommandHistory({ guildId: message.guild.id, channelId: message.channel.id, authorId: message.author.id, command: content, status: "ok" });
       return;
     }
 
     if (/^!resume$/i.test(content)) {
       await resumePlayback({ deviceId: getRequestedDeviceId() });
-      await message.reply("Spotify playback resumed.");
+      await sendReply(message, "Spotify playback resumed.");
+      appendCommandHistory({ guildId: message.guild.id, channelId: message.channel.id, authorId: message.author.id, command: content, status: "ok" });
       return;
     }
 
     if (/^!next$/i.test(content)) {
       await skipToNextTrack({ deviceId: getRequestedDeviceId() });
-      await message.reply("Skipped to the next Spotify track.");
+      await sendReply(message, "Skipped to the next Spotify track.");
+      appendCommandHistory({ guildId: message.guild.id, channelId: message.channel.id, authorId: message.author.id, command: content, status: "ok" });
       return;
     }
 
     if (/^!previous$/i.test(content)) {
       await skipToPreviousTrack({ deviceId: getRequestedDeviceId() });
-      await message.reply("Moved to the previous Spotify track.");
+      await sendReply(message, "Moved to the previous Spotify track.");
+      appendCommandHistory({ guildId: message.guild.id, channelId: message.channel.id, authorId: message.author.id, command: content, status: "ok" });
       return;
     }
 
     if (/^!devices$/i.test(content)) {
       await handleDevicesCommand(message);
+      appendCommandHistory({ guildId: message.guild.id, channelId: message.channel.id, authorId: message.author.id, command: content, status: "ok" });
       return;
     }
 
     if (/^!setdevice\b/i.test(content)) {
       await handleSetDeviceCommand(message, parseCommand(content, "setdevice"));
+      appendCommandHistory({ guildId: message.guild.id, channelId: message.channel.id, authorId: message.author.id, command: content, status: "ok" });
       return;
     }
 
     if (/^!volume\b/i.test(content)) {
       await handleVolumeCommand(message, parseCommand(content, "volume"));
+      appendCommandHistory({ guildId: message.guild.id, channelId: message.channel.id, authorId: message.author.id, command: content, status: "ok" });
       return;
     }
   } catch (error) {
@@ -632,7 +767,15 @@ client.on("messageCreate", async (message) => {
     const userMessage = isDiscordPlayCommand
       ? classifyDiscordPlayError(error)
       : `Spotify command failed: ${error.message}`;
-    await message.reply(userMessage).catch(() => {});
+    appendCommandHistory({
+      guildId: message.guild?.id || null,
+      channelId: message.channel?.id || null,
+      authorId: message.author?.id || null,
+      command: message.content?.trim() || "",
+      status: "error",
+      errorMessage: error.message,
+    });
+    await sendReply(message, userMessage).catch(() => {});
   }
 });
 
